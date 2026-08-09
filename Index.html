@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <?!= include('Styles'); ?>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <section id="loginPage" class="login-page">
+    <div class="login-decoration decoration-one"></div>
+    <div class="login-decoration decoration-two"></div>
+    <div class="login-card">
+      <div class="brand-mark">BI</div>
+      <div class="login-heading">
+        <p class="eyebrow">Sistem Informasi</p>
+        <h1>Dashboard Andil Inflasi</h1>
+        <p>Masuk untuk melihat andil komoditas dan rekap inflasi kabupaten/kota.</p>
+      </div>
+
+      <form id="loginForm" class="login-form">
+        <label>
+          <span>Username</span>
+          <div class="input-wrap">
+            <span class="input-icon">👤</span>
+            <input id="username" name="username" autocomplete="username" required>
+          </div>
+        </label>
+        <label>
+          <span>Password</span>
+          <div class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <button type="button" id="togglePassword" class="password-toggle" aria-label="Tampilkan password">👁</button>
+          </div>
+        </label>
+        <button id="loginButton" type="submit" class="primary-button full-width">
+          <span>Masuk ke Aplikasi</span>
+          <span>→</span>
+        </button>
+        <p id="loginError" class="form-error"></p>
+      </form>
+      <div class="login-footer">Data tersaji sesuai kondisi yang ditetapkan administrator.</div>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark small">BI</div>
+        <div>
+          <strong>Andil Inflasi</strong>
+          <span>Monitoring Dashboard</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu" id="navMenu">
+        <button class="nav-item active" data-view="dashboard"><span>▦</span><b>Dashboard</b></button>
+        <div class="nav-section">MtM</div>
+        <button class="nav-item" data-view="pivot" data-metric="mtm"><span>▤</span><b>Andil MtM</b></button>
+        <button class="nav-item" data-view="inflation" data-metric="mtm"><span>▥</span><b>Inflasi MtM</b></button>
+        <button class="nav-item" data-view="rank" data-metric="mtm"><span>↕</span><b>Komoditas Andil MtM</b></button>
+        <div class="nav-section">YtD</div>
+        <button class="nav-item" data-view="pivot" data-metric="ytd"><span>▤</span><b>Andil YtD</b></button>
+        <button class="nav-item" data-view="inflation" data-metric="ytd"><span>▥</span><b>Inflasi YtD</b></button>
+        <button class="nav-item" data-view="rank" data-metric="ytd"><span>↕</span><b>Komoditas Andil YtD</b></button>
+        <div class="nav-section">YoY</div>
+        <button class="nav-item" data-view="pivot" data-metric="yoy"><span>▤</span><b>Andil YoY</b></button>
+        <button class="nav-item" data-view="inflation" data-metric="yoy"><span>▥</span><b>Inflasi YoY</b></button>
+        <button class="nav-item" data-view="rank" data-metric="yoy"><span>↕</span><b>Komoditas Andil YoY</b></button>
+        <div class="nav-section">Ringkasan</div>
+        <button class="nav-item" data-view="recap"><span>▦</span><b>Rekap Inflasi</b></button>
+        <button class="nav-item" data-view="settings"><span>⚙</span><b>Pengaturan Kondisi</b></button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="condition-mini">
+          <span>Kondisi Data</span>
+          <strong id="sidebarCondition">-</strong>
+        </div>
+        <button id="logoutButton" class="logout-button">Keluar</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button id="menuToggle" class="icon-button menu-toggle">☰</button>
+        <div>
+          <p class="eyebrow">Dashboard Pemantauan</p>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="topbar-actions">
+          <div class="condition-badge">
+            <span>Kondisi Data</span>
+            <strong id="topCondition">-</strong>
+          </div>
+
+          <button
+            id="changeConditionButton"
+            class="condition-change-button"
+            type="button"
+            title="Ganti tanggal dan jam kondisi data">
+            🗓 Ganti Data Per Kapan
+          </button>
+
+          <button
+            id="downloadAllButton"
+            class="condition-change-button"
+            type="button"
+            title="Download seluruh menu sebagai workbook Excel">
+            ⬇ Excel Semua Menu
+          </button>
+
+          <button
+            id="openRawDataButton"
+            class="raw-data-button"
+            type="button"
+            title="Buka spreadsheet sumber di tab baru">
+            ↗ Buka Raw Data
+          </button>
+
+          <button
+            id="refreshButton"
+            class="icon-button"
+            type="button"
+            title="Ambil data terbaru dari spreadsheet">
+            ↻
+          </button>
+        </div>
+      </header>
+
+      <section id="content" class="content-area"></section>
+    </main>
+  </div>
+
+
+  <div id="conditionModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Master Periode Data</p>
+          <h3>Ganti Data Per Kapan</h3>
+        </div>
+
+        <button
+          id="closeConditionModal"
+          class="modal-close-button"
+          type="button"
+          aria-label="Tutup">
+          ×
+        </button>
+      </div>
+
+      <form id="quickConditionForm">
+        <div class="form-group">
+          <label for="quickConditionInput">
+            Pilih tanggal dan jam kondisi data
+          </label>
+
+          <input
+            id="quickConditionInput"
+            class="form-control"
+            type="datetime-local"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="quickStatusInput">Status angka</label>
+          <select id="quickStatusInput" class="form-control" required>
+            <option value="Angka Sementara">Angka Sementara</option>
+            <option value="Angka Tetap">Angka Tetap</option>
+          </select>
+        </div>
+
+        <p class="form-help">
+          Contoh hasil: Angka Sementara — 27 Juli 2026 pukul 08.30 WIB.
+        </p>
+
+        <div class="modal-actions">
+          <button
+            id="cancelConditionButton"
+            class="secondary-button"
+            type="button">
+            Batal
+          </button>
+
+          <button class="primary-button" type="submit">
+            Simpan Periode
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <strong>Memuat data...</strong>
+  </div>
+
+  <?!= include('Scripts'); ?>
+</body>
+</html>

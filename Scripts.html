@@ -1,0 +1,1724 @@
+<script>
+  const state = {
+    token: sessionStorage.getItem('inflationAppToken') || '',
+    view: 'dashboard',
+    metric: null,
+    condition: '-',
+    lastRequest: null,
+    autoRefreshTimer: null,
+    autoRefreshSeconds: 60,
+    currentData: null
+  };
+
+  const pageTitles = {
+    dashboard: 'Dashboard',
+    pivot: 'Tabel Andil',
+    inflation: 'Tabel Inflasi',
+    rank: 'Komoditas Andil',
+    recap: 'Rekap Inflasi',
+    settings: 'Pengaturan Kondisi Data'
+  };
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  function init() {
+    bindEvents();
+    if (state.token) {
+      setLoading(true);
+      server('validateSession', state.token)
+        .then(result => {
+          if (!result.success) throw new Error(result.message);
+          showApp();
+          updateCondition(result.condition);
+          loadDashboard();
+        })
+        .catch(() => forceLogout(false))
+        .finally(() => setLoading(false));
+    }
+  }
+
+  function bindEvents() {
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    document.getElementById('togglePassword').addEventListener('click', togglePassword);
+    document.getElementById('logoutButton').addEventListener('click', () => forceLogout(true));
+    document.getElementById('menuToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+    document.getElementById('refreshButton').addEventListener('click', refreshCurrentView);
+    document.getElementById('downloadAllButton').addEventListener('click', downloadAllMenusExcel);
+    document.getElementById('openRawDataButton').addEventListener('click', openRawData);
+    document.getElementById('changeConditionButton').addEventListener('click', openConditionModal);
+    document.getElementById('closeConditionModal').addEventListener('click', closeConditionModal);
+    document.getElementById('cancelConditionButton').addEventListener('click', closeConditionModal);
+    document.getElementById('quickConditionForm').addEventListener('submit', saveQuickCondition);
+    document.getElementById('conditionModal').addEventListener('click', event => {
+      if (event.target.id === 'conditionModal') closeConditionModal();
+    });
+
+    document.getElementById('navMenu').addEventListener('click', event => {
+      const button = event.target.closest('.nav-item');
+      if (!button) return;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      button.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+
+      const view = button.dataset.view;
+      const metric = button.dataset.metric || null;
+      navigate(view, metric);
+    });
+  }
+
+  function handleLogin(event) {
+    event.preventDefault();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const button = document.getElementById('loginButton');
+    const error = document.getElementById('loginError');
+
+    error.textContent = '';
+    button.disabled = true;
+    button.firstElementChild.textContent = 'Memeriksa...';
+
+    server('login', username, password)
+      .then(result => {
+        if (!result.success) throw new Error(result.message);
+        state.token = result.token;
+        sessionStorage.setItem('inflationAppToken', result.token);
+        showApp();
+        updateCondition(result.condition);
+        loadDashboard();
+      })
+      .catch(err => error.textContent = getErrorMessage(err))
+      .finally(() => {
+        button.disabled = false;
+        button.firstElementChild.textContent = 'Masuk ke Aplikasi';
+      });
+  }
+
+  function togglePassword() {
+    const input = document.getElementById('password');
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+
+  function showApp() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    startAutoRefresh();
+  }
+
+  function navigate(view, metric) {
+    state.view = view;
+    state.metric = metric;
+    const metricLabel = metric ? metric.toUpperCase().replace('YTD', 'YtD').replace('MTM', 'MtM') : '';
+    document.getElementById('pageTitle').textContent = pageTitles[view] + (metricLabel ? ' ' + metricLabel : '');
+
+    if (view === 'dashboard') return loadDashboard();
+    if (view === 'pivot') return loadPivot(metric);
+    if (view === 'inflation') return loadInflation(metric);
+    if (view === 'rank') return loadRank(metric);
+    if (view === 'recap') return loadRecap();
+    if (view === 'settings') return loadSettings();
+  }
+
+  function refreshCurrentView() {
+    navigate(state.view, state.metric);
+  }
+
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+
+    state.autoRefreshTimer = setInterval(() => {
+      if (!state.token || document.hidden) return;
+
+      const modalOpen = !document
+        .getElementById('conditionModal')
+        .classList.contains('hidden');
+
+      if (!modalOpen) refreshCurrentViewSilently();
+    }, state.autoRefreshSeconds * 1000);
+  }
+
+  function stopAutoRefresh() {
+    if (state.autoRefreshTimer) {
+      clearInterval(state.autoRefreshTimer);
+      state.autoRefreshTimer = null;
+    }
+  }
+
+  function refreshCurrentViewSilently() {
+    if (!state.token) return;
+
+    if (state.view === 'dashboard') return loadDashboard(false);
+    if (state.view === 'pivot') return loadPivot(state.metric, false);
+    if (state.view === 'inflation') {
+      const selectedFlag = state.currentData && state.currentData.type === 'inflation'
+        ? state.currentData.data.selectedFlag
+        : '';
+      return loadInflation(state.metric, false, selectedFlag);
+    }
+    if (state.view === 'rank') return loadRank(state.metric, false);
+    if (state.view === 'recap') return loadRecap(false);
+  }
+
+  function loadDashboard(showLoading = true) {
+    runDataRequest('getDashboardData', [state.token], data => {
+      updateCondition(data.condition);
+      const stats = data.statistics;
+      setContent(`
+        <div class="hero-card">
+          <div>
+            <p class="eyebrow" style="color:rgba(255,255,255,.7)">Ringkasan Data Inflasi</p>
+            <h3>Selamat datang di Dashboard Andil Inflasi</h3>
+            <p>Data aplikasi dibaca langsung dari spreadsheet sumber.</p>
+          </div>
+          <div class="hero-condition">
+            <span>Kondisi Data</span>
+            <strong>${escapeHtml(data.condition)}</strong>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          ${statCard('Total Baris Data', stats.totalRows, 'seluruh data')}
+          ${statCard('Data Flag 3', stats.flag3Rows, 'data komoditas')}
+          ${statCard('Data Flag 0', stats.flag0Rows, 'data rekap')}
+          ${statCard('Komoditas', stats.commodities, 'unik')}
+          ${statCard('Wilayah', stats.regions, 'kode wilayah')}
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div><h3>Wilayah dalam Aplikasi</h3><p>Kode dan nama wilayah dibaca dari kolom C dan D.</p></div>
+            <small>Dimuat ${escapeHtml(data.lastUpdated)}</small>
+          </div>
+          <div class="region-chips">
+            ${data.regions.map(r => `<div class="region-chip"><strong>${escapeHtml(r.code)}</strong><span>${escapeHtml(r.name)}</span></div>`).join('')}
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div><h3>Petunjuk Singkat</h3><p>Pilih menu di sebelah kiri untuk melihat rincian.</p></div></div>
+          <div class="info-list">
+            <div class="info-row"><span>Tabel Andil</span><strong>Pivot andil komoditas per wilayah</strong></div>
+            <div class="info-row"><span>Tabel Inflasi</span><strong>Inflasi komoditas per wilayah dengan filter Flag</strong></div>
+            <div class="info-row"><span>Komoditas Andil</span><strong>10 tertinggi dan 10 terendah per wilayah</strong></div>
+            <div class="info-row"><span>Rekap Inflasi</span><strong>MtM, YtD, dan YoY dari Flag 0</strong></div>
+            <div class="info-row"><span>Pengaturan Kondisi</span><strong>Diisi manual oleh administrator</strong></div>
+          </div>
+        </div>
+      `);
+    }, showLoading);
+  }
+
+  function loadPivot(metric, showLoading = true) {
+    runDataRequest('getPivotData', [state.token, metric], data => {
+      state.currentData = { type: 'pivot', metric, data };
+      updateCondition(data.condition);
+
+      const tableId = 'pivotTable';
+      const searchId = 'pivotSearch';
+      const headerRegions = data.regions.map(r =>
+        `<th class="number sortable" data-sort-type="number" title="${escapeAttr(r.name)}">${escapeHtml(r.code)}</th>`
+      ).join('');
+
+      const rows = data.rows.map((r, index) => `
+        <tr>
+          <td class="center" data-sort-value="${index + 1}">${index + 1}</td>
+          <td data-sort-value="${escapeAttr(r.commodityCode)}">${escapeHtml(r.commodityCode)}</td>
+          <td data-sort-value="${escapeAttr(r.commodityName)}">${escapeHtml(r.commodityName)}</td>
+          ${data.regions.map(region => {
+            const value = r.values[region.code];
+            return `<td class="number" data-sort-value="${value === null || value === undefined ? '' : Number(value)}">${formatNumber(value)}</td>`;
+          }).join('')}
+        </tr>
+      `).join('');
+
+      setContent(`
+        <div class="panel">
+          <div class="panel-header">
+            <div><h3>${escapeHtml(data.title)}</h3><p>Kondisi: <strong>${escapeHtml(data.condition)}</strong> · Filter Flag = 3</p></div>
+            <span class="region-chip"><strong>${data.rows.length}</strong><span>komoditas</span></span>
+          </div>
+
+          ${tableToolbar(searchId, `Cari kode atau nama komoditas...`, `downloadCurrentMenuExcel()`, 'Download Excel Menu Ini')}
+
+          <div class="table-wrap tall-table">
+            <table id="${tableId}" class="interactive-table rank-data-table">
+              <thead>
+                <tr>
+                  <th class="center sortable" data-sort-type="number">No</th>
+                  <th class="sortable" data-sort-type="text">Kode Komoditas</th>
+                  <th class="sortable" data-sort-type="text">Nama Komoditas</th>
+                  ${headerRegions}
+                </tr>
+              </thead>
+              <tbody>${rows || emptyRow(3 + data.regions.length)}</tbody>
+            </table>
+          </div>
+        </div>
+      `);
+
+      initializeInteractiveTable(tableId, searchId);
+    }, showLoading);
+  }
+
+
+  function loadInflation(metric, showLoading = true, selectedFlag = '') {
+    runDataRequest(
+      'getInflationPivotData',
+      [state.token, metric, selectedFlag],
+      data => {
+        state.currentData = { type: 'inflation', metric, data };
+        updateCondition(data.condition);
+
+        const tableId = 'inflationTable';
+        const searchId = 'inflationSearch';
+        const flagId = 'inflationFlagFilter';
+
+        const individualFlagOptions = (data.availableFlags || []).map(flag => `
+          <option
+            value="${escapeAttr(flag)}"
+            ${String(flag) === String(data.selectedFlag) ? 'selected' : ''}>
+            Flag ${escapeHtml(flag)}
+          </option>
+        `).join('');
+
+        const flagOptions = `
+          <option
+            value="__ALL__"
+            ${data.selectedFlag === '__ALL__' ? 'selected' : ''}>
+            Semua Flag
+          </option>
+          ${individualFlagOptions}
+        `;
+
+        const headerRegions = data.regions.map(region => `
+          <th
+            class="number sortable"
+            data-sort-type="number"
+            title="${escapeAttr(region.name)}">
+            ${escapeHtml(region.code)}
+          </th>
+        `).join('');
+
+        const rows = data.rows.map((row, index) => {
+          const rowValues = data.regions
+            .map(region => row.values[region.code])
+            .filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)))
+            .map(Number);
+
+          const rowMax = rowValues.length ? Math.max(...rowValues) : null;
+          const rowMin = rowValues.length ? Math.min(...rowValues) : null;
+          const hasDifferentValues =
+            rowMax !== null &&
+            rowMin !== null &&
+            !nearlyEqual(rowMax, rowMin);
+
+          return `
+            <tr>
+              <td class="center" data-sort-value="${index + 1}">${index + 1}</td>
+              <td data-sort-value="${escapeAttr(row.commodityCode)}">${escapeHtml(row.commodityCode)}</td>
+              <td data-sort-value="${escapeAttr(row.commodityName)}">${escapeHtml(row.commodityName)}</td>
+
+              ${data.regions.map(region => {
+                const value = row.values[region.code];
+                const numericValue =
+                  value === null || value === undefined
+                    ? null
+                    : Number(value);
+
+                let cellClass = '';
+
+                if (
+                  hasDifferentValues &&
+                  numericValue !== null &&
+                  nearlyEqual(numericValue, rowMax)
+                ) {
+                  cellClass = 'value-max';
+                } else if (
+                  hasDifferentValues &&
+                  numericValue !== null &&
+                  nearlyEqual(numericValue, rowMin)
+                ) {
+                  cellClass = 'value-min';
+                } else if (numericValue > 0) {
+                  cellClass = 'positive';
+                } else if (numericValue < 0) {
+                  cellClass = 'negative';
+                }
+
+                return `
+                  <td
+                    class="number ${cellClass}"
+                    data-sort-value="${numericValue === null ? '' : numericValue}">
+                    ${formatNumber(value)}
+                  </td>
+                `;
+              }).join('')}
+            </tr>
+          `;
+        }).join('');
+
+        setContent(`
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>${escapeHtml(data.title)}</h3>
+                <p>
+                  Kondisi: <strong>${escapeHtml(data.condition)}</strong>
+                  · Filter <strong>${escapeHtml(
+                    data.selectedFlagLabel || (
+                      data.selectedFlag === '__ALL__'
+                        ? 'Semua Flag'
+                        : 'Flag ' + (data.selectedFlag || '-')
+                    )
+                  )}</strong>
+                </p>
+              </div>
+
+              <span class="region-chip">
+                <strong>${data.rows.length}</strong>
+                <span>komoditas</span>
+              </span>
+            </div>
+
+            <div class="inflation-controls">
+              <div class="flag-filter-group">
+                <label for="${flagId}">Filter Flag</label>
+                <select id="${flagId}" class="form-control flag-filter-select">
+                  ${flagOptions}
+                </select>
+              </div>
+
+              <div class="table-toolbar inflation-toolbar">
+                <div class="search-box">
+                  <span>⌕</span>
+                  <input
+                    id="${searchId}"
+                    type="search"
+                    placeholder="Cari kode atau nama komoditas..."
+                    autocomplete="off">
+                </div>
+
+                <button
+                  class="excel-button"
+                  type="button"
+                  onclick="downloadCurrentMenuExcel()">
+                  ⬇ Download Excel Menu Ini
+                </button>
+              </div>
+            </div>
+
+            <div class="table-wrap tall-table inflation-table-wrap">
+              <table id="${tableId}" class="interactive-table inflation-data-table">
+                <thead>
+                  <tr>
+                    <th class="center sortable" data-sort-type="number">No</th>
+                    <th class="sortable" data-sort-type="text">Kode Komoditas</th>
+                    <th class="sortable" data-sort-type="text">Nama Komoditas</th>
+                    ${headerRegions}
+                  </tr>
+                </thead>
+                <tbody>${rows || emptyRow(3 + data.regions.length)}</tbody>
+              </table>
+            </div>
+          </div>
+        `);
+
+        initializeInteractiveTable(tableId, searchId);
+
+        const flagSelect = document.getElementById(flagId);
+        if (flagSelect) {
+          flagSelect.addEventListener('change', event => {
+            loadInflation(metric, true, event.target.value);
+          });
+        }
+      },
+      showLoading
+    );
+  }
+
+  function loadRank(metric, showLoading = true) {
+    runDataRequest('getTopBottomData', [state.token, metric], data => {
+      state.currentData = { type: 'rank', metric, data };
+      updateCondition(data.condition);
+
+      const regionPairs = data.regions.map((region, regionIndex) => {
+        const lowId = `rankLow_${regionIndex}`;
+        const highId = `rankHigh_${regionIndex}`;
+        const lowSearch = `rankLowSearch_${regionIndex}`;
+        const highSearch = `rankHighSearch_${regionIndex}`;
+
+        return `
+          <section class="region-rank-section" data-region-index="${regionIndex}" data-region-name="${escapeAttr(region.name)}">
+            <div class="region-rank-heading">
+              <div>
+                <h3>${escapeHtml(region.name)}</h3>
+                <p>Kode wilayah ${escapeHtml(region.code)} · Andil ${escapeHtml(data.metric)}</p>
+              </div>
+            </div>
+
+            <div class="rank-pair-grid">
+              ${rankCard(region, data.metric, 'lowest', lowId, lowSearch)}
+              ${rankCard(region, data.metric, 'highest', highId, highSearch)}
+            </div>
+          </section>
+        `;
+      }).join('');
+
+      const globalSearchId = 'rankGlobalSearch';
+
+      setContent(`
+        <div class="panel compact-panel">
+          <div class="panel-header">
+            <div>
+              <h3>Komoditas Andil ${escapeHtml(data.metric)}</h3>
+              <p>Kondisi: <strong>${escapeHtml(data.condition)}</strong> · Kiri 10 terendah, kanan 10 tertinggi.</p>
+            </div>
+            <div class="panel-action-buttons">
+              <button
+                class="image-button"
+                type="button"
+                onclick="downloadCurrentMenuImage()">
+                ▣ Download Image
+              </button>
+
+              <button
+                class="pdf-button"
+                type="button"
+                onclick="downloadCurrentMenuPdf()">
+                ▤ Download PDF
+              </button>
+
+              <button
+                class="excel-button"
+                type="button"
+                onclick="downloadCurrentMenuExcel()">
+                ⬇ Download Excel Menu Ini
+              </button>
+            </div>
+          </div>
+
+          <div class="global-rank-search">
+            <div class="search-box global-search-box">
+              <span>⌕</span>
+              <input
+                id="${globalSearchId}"
+                type="search"
+                placeholder="Cari komoditas di semua kabupaten/kota..."
+                autocomplete="off">
+            </div>
+            <p id="rankGlobalSearchInfo" class="global-search-info">
+              Ketik nama atau kode komoditas untuk menampilkan kabupaten/kota yang sesuai.
+            </p>
+          </div>
+        </div>
+
+        <div id="rankNoGlobalResult" class="panel global-no-result hidden">
+          <div class="empty-state">
+            <strong>Komoditas tidak ditemukan</strong>
+            <p>Tidak ada kabupaten/kota yang memiliki komoditas sesuai pencarian.</p>
+          </div>
+        </div>
+
+        <div id="rankRegionsContainer">
+          ${regionPairs}
+        </div>
+      `);
+
+      data.regions.forEach((region, regionIndex) => {
+        initializeInteractiveTable(`rankLow_${regionIndex}`, `rankLowSearch_${regionIndex}`);
+        initializeInteractiveTable(`rankHigh_${regionIndex}`, `rankHighSearch_${regionIndex}`);
+      });
+
+      initializeRankGlobalSearch(globalSearchId);
+    }, showLoading);
+  }
+
+  function rankCard(region, metricLabel, type, tableId, searchId) {
+    const isHigh = type === 'highest';
+    const list = region[type] || [];
+    const rows = list.map((item, index) => `
+      <tr>
+        <td class="center" data-sort-value="${index + 1}">${index + 1}</td>
+        <td class="rank-code-cell" data-sort-value="${escapeAttr(item.commodityCode)}">${escapeHtml(item.commodityCode)}</td>
+        <td class="rank-name-cell" data-sort-value="${escapeAttr(item.commodityName)}" title="${escapeAttr(item.commodityName)}"><span>${escapeHtml(item.commodityName)}</span></td>
+        <td class="number rank-value-cell ${item.value > 0 ? 'positive' : item.value < 0 ? 'negative' : ''}" data-sort-value="${Number(item.value)}">${formatNumber(item.value)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <article class="rank-card ${isHigh ? 'rank-high' : 'rank-low'}">
+        <div class="rank-card-header">
+          <strong>${isHigh ? '10 Tertinggi' : '10 Terendah'}</strong>
+          <span>${escapeHtml(region.name)} · Andil ${escapeHtml(metricLabel)}</span>
+        </div>
+        ${tableToolbar(searchId, 'Cari komoditas...', '', '')}
+        <div class="table-wrap rank-table-wrap">
+          <table id="${tableId}" class="interactive-table rank-data-table">
+            <thead>
+              <tr>
+                <th class="center sortable rank-no-column" data-sort-type="number">No</th>
+                <th class="sortable rank-code-column" data-sort-type="text">Kode</th>
+                <th class="sortable rank-name-column" data-sort-type="text">Nama Komoditas</th>
+                <th class="number sortable rank-value-column" data-sort-type="number">Andil</th>
+              </tr>
+            </thead>
+            <tbody>${rows || emptyRow(4)}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
+  }
+
+  function loadRecap(showLoading = true) {
+    runDataRequest('getRecapData', [state.token], data => {
+      state.currentData = { type: 'recap', data };
+      updateCondition(data.condition);
+
+      const tableId = 'recapTable';
+      const searchId = 'recapSearch';
+      const rows = data.rows.map((r, index) => `
+        <tr>
+          <td class="center" data-sort-value="${index + 1}">${index + 1}</td>
+          <td data-sort-value="${escapeAttr(r.code)}"><strong>${escapeHtml(r.code)}</strong></td>
+          <td data-sort-value="${escapeAttr(r.name)}">${escapeHtml(r.name)}</td>
+          ${recapCell(r.mtm, data.extrema.mtm)}
+          ${recapCell(r.ytd, data.extrema.ytd)}
+          ${recapCell(r.yoy, data.extrema.yoy)}
+        </tr>
+      `).join('');
+
+      setContent(`
+        <div class="panel">
+          <div class="panel-header">
+            <div><h3>Rekap Inflasi Kabupaten/Kota</h3><p>Kondisi: <strong>${escapeHtml(data.condition)}</strong> · Filter Flag = 0</p></div>
+            <div class="panel-action-buttons">
+              <button
+                class="image-button"
+                type="button"
+                onclick="downloadCurrentMenuImage()">
+                ▣ Download Image
+              </button>
+
+              <button
+                class="pdf-button"
+                type="button"
+                onclick="downloadCurrentMenuPdf()">
+                ▤ Download PDF
+              </button>
+            </div>
+          </div>
+
+          ${tableToolbar(searchId, 'Cari kode atau nama kabupaten/kota...', `downloadCurrentMenuExcel()`, 'Download Excel Menu Ini')}
+
+          <div class="table-wrap tall-table">
+            <table id="${tableId}" class="interactive-table rank-data-table">
+              <thead>
+                <tr>
+                  <th class="center sortable" data-sort-type="number">No</th>
+                  <th class="sortable" data-sort-type="text">Kode</th>
+                  <th class="sortable" data-sort-type="text">Kabupaten/Kota</th>
+                  <th class="number sortable" data-sort-type="number">MtM</th>
+                  <th class="number sortable" data-sort-type="number">YtD</th>
+                  <th class="number sortable" data-sort-type="number">YoY</th>
+                </tr>
+              </thead>
+              <tbody>${rows || emptyRow(6)}</tbody>
+            </table>
+          </div>
+          <div class="note-box">Klik judul kolom untuk mengurutkan. Angka tertinggi ditandai merah dan angka terendah ditandai hijau.</div>
+        </div>
+      `);
+
+      initializeInteractiveTable(tableId, searchId);
+    }, showLoading);
+  }
+
+  function recapCell(value, extrema) {
+    let cls = '';
+    if (value !== null && extrema.max !== null && nearlyEqual(value, extrema.max)) cls = 'value-max';
+    else if (value !== null && extrema.min !== null && nearlyEqual(value, extrema.min)) cls = 'value-min';
+    return `<td class="number ${cls}" data-sort-value="${value === null || value === undefined ? '' : Number(value)}"><strong>${formatNumber(value)}</strong></td>`;
+  }
+
+  function loadSettings() {
+    runDataRequest('getSettings', [state.token], data => {
+      updateCondition(data.condition);
+      setContent(`
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-header"><div><h3>Master Kondisi Data</h3><p>Nilai ini tampil otomatis pada seluruh menu.</p></div></div>
+            <form id="conditionForm">
+              <div class="form-group">
+                <label for="conditionInput">Kondisi data per kapan</label>
+                <input id="conditionInput" class="form-control" type="datetime-local" value="${escapeAttr(data.conditionValue || '')}" required>
+              </div>
+
+              <div class="form-group">
+                <label for="dataStatusInput">Status angka</label>
+                <select id="dataStatusInput" class="form-control" required>
+                  <option value="Angka Sementara" ${data.dataStatus === 'Angka Sementara' ? 'selected' : ''}>Angka Sementara</option>
+                  <option value="Angka Tetap" ${data.dataStatus === 'Angka Tetap' ? 'selected' : ''}>Angka Tetap</option>
+                </select>
+              </div>
+
+              <button class="primary-button" type="submit">Simpan Kondisi Data</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><div><h3>Informasi Sumber</h3><p>Konfigurasi spreadsheet yang sedang digunakan.</p></div></div>
+            <div class="info-list">
+              <div class="info-row"><span>Spreadsheet</span><strong>${escapeHtml(data.spreadsheetName)}</strong></div>
+              <div class="info-row"><span>Sheet Data</span><strong>${escapeHtml(data.dataSheetName)}</strong></div>
+              <div class="info-row"><span>Pembulatan</span><strong>2 angka di belakang koma</strong></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><div><h3>Ubah Login</h3><p>Gunakan setidaknya 4 karakter.</p></div></div>
+            <form id="loginSettingForm">
+              <div class="form-group"><label>Username baru</label><input id="newUsername" class="form-control" required minlength="4"></div>
+              <div class="form-group"><label>Password baru</label><input id="newPassword" class="form-control" type="password" required minlength="4"></div>
+              <button class="primary-button" type="submit">Perbarui Login</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><div><h3>Ketentuan Pembacaan</h3><p>Struktur data yang digunakan aplikasi.</p></div></div>
+            <div class="info-list">
+              <div class="info-row"><span>Kode wilayah</span><strong>Kolom C</strong></div>
+              <div class="info-row"><span>Nama wilayah</span><strong>Kolom D</strong></div>
+              <div class="info-row"><span>Kode/Nama komoditas</span><strong>Kolom E/F</strong></div>
+              <div class="info-row"><span>Inflasi MtM/YtD/YoY</span><strong>Kolom I/J/K</strong></div>
+              <div class="info-row"><span>Andil MtM/YtD/YoY</span><strong>Kolom L/M/N</strong></div>
+            </div>
+          </div>
+        </div>
+      `);
+
+      document.getElementById('conditionForm').addEventListener('submit', saveCondition);
+      document.getElementById('loginSettingForm').addEventListener('submit', saveLoginSetting);
+    });
+  }
+
+
+  function tableToolbar(searchId, placeholder, action, actionLabel) {
+    return `
+      <div class="table-toolbar">
+        <div class="search-box">
+          <span>⌕</span>
+          <input id="${searchId}" type="search" placeholder="${escapeAttr(placeholder)}" autocomplete="off">
+        </div>
+        ${action ? `<button class="excel-button" type="button" onclick="${action}">⬇ ${escapeHtml(actionLabel)}</button>` : ''}
+      </div>
+    `;
+  }
+
+  function initializeInteractiveTable(tableId, searchInputId) {
+    const table = document.getElementById(tableId);
+    const searchInput = document.getElementById(searchInputId);
+    if (!table) return;
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const keyword = normalizeSearchText(searchInput.value);
+        Array.from(table.tBodies[0].rows).forEach(row => {
+          if (row.querySelector('.empty-state')) return;
+          const rowText = normalizeSearchText(row.textContent);
+          row.classList.toggle('local-filtered-out', keyword && !rowText.includes(keyword));
+        });
+        renumberVisibleRows(table);
+      });
+    }
+
+    table.querySelectorAll('thead th.sortable').forEach((header, columnIndex) => {
+      header.title = 'Klik untuk mengurutkan';
+      header.addEventListener('click', () => sortTable(table, columnIndex, header));
+    });
+  }
+
+
+  function initializeRankGlobalSearch(searchInputId) {
+    const searchInput = document.getElementById(searchInputId);
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', () => {
+      applyRankGlobalSearch(searchInput.value);
+    });
+  }
+
+  function applyRankGlobalSearch(rawKeyword) {
+    const keyword = normalizeSearchText(rawKeyword);
+    const sections = Array.from(document.querySelectorAll('.region-rank-section'));
+    const noResult = document.getElementById('rankNoGlobalResult');
+    const info = document.getElementById('rankGlobalSearchInfo');
+    let visibleRegions = 0;
+    let matchingRows = 0;
+
+    sections.forEach(section => {
+      const tables = Array.from(section.querySelectorAll('table.interactive-table'));
+      let sectionHasMatch = !keyword;
+
+      tables.forEach(table => {
+        Array.from(table.tBodies[0].rows).forEach(row => {
+          if (row.querySelector('.empty-state')) return;
+
+          const rowText = normalizeSearchText(row.textContent);
+          const matches = !keyword || rowText.includes(keyword);
+
+          row.classList.toggle('global-filtered-out', !matches);
+
+          if (matches && keyword) {
+            sectionHasMatch = true;
+            matchingRows++;
+          }
+        });
+
+        renumberVisibleRows(table);
+      });
+
+      section.classList.toggle('global-region-hidden', !sectionHasMatch);
+
+      if (sectionHasMatch) {
+        visibleRegions++;
+      }
+    });
+
+    if (noResult) {
+      noResult.classList.toggle('hidden', !keyword || visibleRegions > 0);
+    }
+
+    if (info) {
+      if (!keyword) {
+        info.textContent =
+          'Ketik nama atau kode komoditas untuk menampilkan kabupaten/kota yang sesuai.';
+      } else if (visibleRegions > 0) {
+        info.textContent =
+          'Ditemukan ' + matchingRows + ' baris pada ' +
+          visibleRegions + ' kabupaten/kota.';
+      } else {
+        info.textContent = 'Tidak ditemukan komoditas "' + rawKeyword.trim() + '".';
+      }
+    }
+  }
+
+  function sortTable(table, columnIndex, header) {
+    const tbody = table.tBodies[0];
+    const rows = Array.from(tbody.rows).filter(row => !row.querySelector('.empty-state'));
+    const direction = header.dataset.direction === 'asc' ? 'desc' : 'asc';
+    const type = header.dataset.sortType || 'text';
+
+    table.querySelectorAll('thead th').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      delete th.dataset.direction;
+    });
+
+    header.dataset.direction = direction;
+    header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+    rows.sort((rowA, rowB) => {
+      const a = getCellSortValue(rowA.cells[columnIndex], type);
+      const b = getCellSortValue(rowB.cells[columnIndex], type);
+      if (a < b) return direction === 'asc' ? -1 : 1;
+      if (a > b) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+    renumberVisibleRows(table);
+  }
+
+  function getCellSortValue(cell, type) {
+    if (!cell) return type === 'number' ? -Infinity : '';
+    const hasRawValue = cell.dataset.sortValue !== undefined;
+    const raw = hasRawValue ? cell.dataset.sortValue : cell.textContent;
+    if (type === 'number') {
+      const normalized = hasRawValue
+        ? String(raw)
+        : String(raw).replace(/\./g, '').replace(',', '.');
+      const number = Number(normalized);
+      return Number.isFinite(number) ? number : -Infinity;
+    }
+    return normalizeSearchText(raw);
+  }
+
+  function renumberVisibleRows(table) {
+    let number = 1;
+    Array.from(table.tBodies[0].rows).forEach(row => {
+      if (row.querySelector('.empty-state') || row.classList.contains('local-filtered-out') || row.classList.contains('global-filtered-out')) return;
+      if (row.cells[0]) row.cells[0].textContent = number++;
+    });
+  }
+
+  function normalizeSearchText(value) {
+    return String(value || '').toLowerCase().trim();
+  }
+
+  function ensureXlsxReady() {
+    if (typeof XLSX === 'undefined') {
+      throw new Error('Pustaka Excel belum berhasil dimuat. Periksa koneksi internet lalu muat ulang aplikasi.');
+    }
+  }
+
+
+  /**
+   * Mengunduh tampilan menu aktif menjadi satu file PNG.
+   * Menu komoditas menghasilkan satu gambar berisi 5 wilayah x 2 tabel = 10 tabel.
+   * Rekap inflasi menghasilkan satu gambar berisi seluruh tabel rekap.
+   */
+  function downloadCurrentMenuImage() {
+    const current = state.currentData;
+
+    if (!current || (current.type !== 'rank' && current.type !== 'recap')) {
+      showToast(
+        'Download image tersedia pada menu Komoditas Andil dan Rekap Inflasi.',
+        'error'
+      );
+      return;
+    }
+
+    if (typeof html2canvas !== 'function') {
+      showToast(
+        'Pustaka pembuat gambar belum termuat. Muat ulang halaman lalu coba lagi.',
+        'error'
+      );
+      return;
+    }
+
+    const exportElement = current.type === 'rank'
+      ? buildRankImageExport(current.metric, current.data)
+      : buildRecapImageExport(current.data);
+
+    document.body.appendChild(exportElement);
+    setLoading(true);
+
+    requestAnimationFrame(() => {
+      const renderImage = () => html2canvas(exportElement, {
+        backgroundColor: '#f4f7fb',
+        // Resolusi tinggi agar tulisan tetap jelas saat dibuka dari HP.
+        scale: 2.5,
+        useCORS: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: exportElement.scrollWidth,
+        windowHeight: exportElement.scrollHeight
+      });
+
+      const canvasPromise = document.fonts && document.fonts.ready
+        ? document.fonts.ready.then(renderImage)
+        : renderImage();
+
+      canvasPromise
+        .then(canvas => {
+          const title = current.type === 'rank'
+            ? 'Komoditas_Andil_' + String(current.data.metric || current.metric)
+            : 'Rekap_Inflasi';
+
+          const fileName = sanitizeFileName(
+            title + '_' + String(current.data.condition || '') + '.png'
+          );
+
+          downloadCanvasAsPng(canvas, fileName);
+          showToast('Image berhasil dibuat dan diunduh.', 'success');
+        })
+        .catch(error => {
+          showToast(
+            'Gagal membuat image: ' + getErrorMessage(error),
+            'error'
+          );
+        })
+        .finally(() => {
+          exportElement.remove();
+          setLoading(false);
+        });
+    });
+  }
+
+  function buildRankImageExport(metric, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-export-page rank-image-export';
+
+    const regionHtml = (data.regions || []).map(region => `
+      <section class="image-export-region">
+        <div class="image-export-region-title">
+          <h2>${escapeHtml(region.name)}</h2>
+          <p>Kode wilayah ${escapeHtml(region.code)} · Andil ${escapeHtml(data.metric)}</p>
+        </div>
+
+        <div class="image-export-pair">
+          ${buildRankImageTable(region, data.metric, 'lowest')}
+          ${buildRankImageTable(region, data.metric, 'highest')}
+        </div>
+      </section>
+    `).join('');
+
+    wrapper.innerHTML = `
+      <header class="image-export-header">
+        <div>
+          <p class="image-export-eyebrow">Dashboard Pemantauan Inflasi</p>
+          <h1>Komoditas Andil ${escapeHtml(data.metric)}</h1>
+          <p>10 komoditas terendah dan 10 komoditas tertinggi per kabupaten/kota</p>
+        </div>
+        <div class="image-export-condition">
+          <span>Kondisi Data</span>
+          <strong>${escapeHtml(data.condition)}</strong>
+        </div>
+      </header>
+
+      <main class="image-export-content">
+        ${regionHtml}
+      </main>
+
+      <footer class="image-export-footer">
+        Dashboard Andil Inflasi · BPS Provinsi Kepulauan Bangka Belitung
+      </footer>
+    `;
+
+    return wrapper;
+  }
+
+  function buildRankImageTable(region, metricLabel, type) {
+    const isHigh = type === 'highest';
+    const list = region[type] || [];
+
+    const rows = list.map((item, index) => `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td class="image-export-name">${escapeHtml(item.commodityName)}</td>
+        <td class="number ${item.value > 0 ? 'positive' : item.value < 0 ? 'negative' : ''}">
+          ${formatNumber(item.value)}
+        </td>
+      </tr>
+    `).join('');
+
+    return `
+      <article class="image-export-card ${isHigh ? 'export-high' : 'export-low'}">
+        <div class="image-export-card-header">
+          <strong>${isHigh ? '10 Tertinggi' : '10 Terendah'}</strong>
+          <span>${escapeHtml(region.name)} · Andil ${escapeHtml(metricLabel)}</span>
+        </div>
+
+        <table class="image-export-table image-export-table-no-code">
+          <colgroup>
+            <col style="width:8%">
+            <col style="width:74%">
+            <col style="width:18%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="center">No</th>
+              <th>Nama Komoditas</th>
+              <th class="number">Andil</th>
+            </tr>
+          </thead>
+          <tbody>${rows || emptyRow(3)}</tbody>
+        </table>
+      </article>
+    `;
+  }
+
+  function buildRecapImageExport(data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-export-page recap-image-export';
+
+    const rows = (data.rows || []).map((row, index) => `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td>${escapeHtml(row.code)}</td>
+        <td>${escapeHtml(row.name)}</td>
+        ${recapImageCell(row.mtm, data.extrema.mtm)}
+        ${recapImageCell(row.ytd, data.extrema.ytd)}
+        ${recapImageCell(row.yoy, data.extrema.yoy)}
+      </tr>
+    `).join('');
+
+    wrapper.innerHTML = `
+      <header class="image-export-header">
+        <div>
+          <p class="image-export-eyebrow">Dashboard Pemantauan Inflasi</p>
+          <h1>Rekap Inflasi Kabupaten/Kota</h1>
+          <p>Inflasi MtM, YtD, dan YoY</p>
+        </div>
+        <div class="image-export-condition">
+          <span>Kondisi Data</span>
+          <strong>${escapeHtml(data.condition)}</strong>
+        </div>
+      </header>
+
+      <main class="image-export-content">
+        <article class="image-export-card recap-export-card">
+          <table class="image-export-table recap-export-table">
+            <colgroup>
+              <col style="width:7%">
+              <col style="width:15%">
+              <col style="width:36%">
+              <col style="width:14%">
+              <col style="width:14%">
+              <col style="width:14%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="center">No</th>
+                <th>Kode</th>
+                <th>Kabupaten/Kota</th>
+                <th class="number">MtM</th>
+                <th class="number">YtD</th>
+                <th class="number">YoY</th>
+              </tr>
+            </thead>
+            <tbody>${rows || emptyRow(6)}</tbody>
+          </table>
+
+          <div class="image-export-note">
+            Angka tertinggi ditandai merah dan angka terendah ditandai hijau.
+          </div>
+        </article>
+      </main>
+
+      <footer class="image-export-footer">
+        Dashboard Andil Inflasi · BPS Provinsi Kepulauan Bangka Belitung
+      </footer>
+    `;
+
+    return wrapper;
+  }
+
+  function recapImageCell(value, extrema) {
+    let className = '';
+
+    if (
+      value !== null &&
+      extrema &&
+      extrema.max !== null &&
+      nearlyEqual(value, extrema.max)
+    ) {
+      className = 'value-max';
+    } else if (
+      value !== null &&
+      extrema &&
+      extrema.min !== null &&
+      nearlyEqual(value, extrema.min)
+    ) {
+      className = 'value-min';
+    }
+
+    return `
+      <td class="number ${className}">
+        <strong>${formatNumber(value)}</strong>
+      </td>
+    `;
+  }
+
+
+  /**
+   * Membersihkan nama file agar aman digunakan saat download.
+   * Karakter khusus, spasi berulang, dan tanda baca yang tidak valid
+   * akan diganti dengan garis bawah.
+   */
+  function sanitizeFileName(fileName) {
+    const rawName = String(fileName || 'download.png').trim();
+
+    const lastDot = rawName.lastIndexOf('.');
+    const hasExtension = lastDot > 0;
+    const extension = hasExtension
+      ? rawName.slice(lastDot).toLowerCase()
+      : '.png';
+
+    const baseName = hasExtension
+      ? rawName.slice(0, lastDot)
+      : rawName;
+
+    const cleanedBase = baseName
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+      .replace(/[—–-]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^[._\s]+|[._\s]+$/g, '')
+      .slice(0, 180);
+
+    const safeBase = cleanedBase || 'download_image';
+    const safeExtension = extension === '.png' ? '.png' : '.png';
+
+    return safeBase + safeExtension;
+  }
+
+  function downloadCanvasAsPng(canvas, fileName) {
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = canvas.toDataURL('image/png', 1);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+
+  /**
+   * Mengunduh menu aktif sebagai PDF.
+   * Tersedia hanya pada Komoditas Andil MtM/YtD/YoY dan Rekap Inflasi.
+   * Layout sumber sama persis dengan Download Image, kemudian dibagi
+   * otomatis menjadi beberapa halaman A4 portrait agar tetap terbaca.
+   */
+  function downloadCurrentMenuPdf() {
+    const current = state.currentData;
+
+    if (!current || (current.type !== 'rank' && current.type !== 'recap')) {
+      showToast(
+        'Download PDF tersedia pada menu Komoditas Andil dan Rekap Inflasi.',
+        'error'
+      );
+      return;
+    }
+
+    if (typeof html2canvas !== 'function') {
+      showToast(
+        'Pustaka pembuat tampilan belum termuat. Muat ulang halaman lalu coba lagi.',
+        'error'
+      );
+      return;
+    }
+
+    if (
+      !window.jspdf ||
+      typeof window.jspdf.jsPDF !== 'function'
+    ) {
+      showToast(
+        'Pustaka PDF belum termuat. Muat ulang halaman lalu coba lagi.',
+        'error'
+      );
+      return;
+    }
+
+    const exportElement = current.type === 'rank'
+      ? buildRankImageExport(current.metric, current.data)
+      : buildRecapImageExport(current.data);
+
+    document.body.appendChild(exportElement);
+    setLoading(true);
+
+    requestAnimationFrame(() => {
+      const renderPdfCanvas = () => html2canvas(exportElement, {
+        backgroundColor: '#f4f7fb',
+        scale: 2.5,
+        useCORS: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: exportElement.scrollWidth,
+        windowHeight: exportElement.scrollHeight
+      });
+
+      const canvasPromise = document.fonts && document.fonts.ready
+        ? document.fonts.ready.then(renderPdfCanvas)
+        : renderPdfCanvas();
+
+      canvasPromise
+        .then(canvas => {
+          const title = current.type === 'rank'
+            ? 'Komoditas_Andil_' + String(
+                current.data.metric || current.metric
+              )
+            : 'Rekap_Inflasi';
+
+          const fileName = sanitizeFileName(
+            title + '_' +
+            String(current.data.condition || '') +
+            '.pdf'
+          ).replace(/\.png$/i, '.pdf');
+
+          downloadCanvasAsPdf(canvas, fileName);
+          showToast('PDF berhasil dibuat dan diunduh.', 'success');
+        })
+        .catch(error => {
+          showToast(
+            'Gagal membuat PDF: ' + getErrorMessage(error),
+            'error'
+          );
+        })
+        .finally(() => {
+          exportElement.remove();
+          setLoading(false);
+        });
+    });
+  }
+
+  /**
+   * Membagi canvas panjang menjadi beberapa halaman A4 portrait.
+   * Setiap potongan memakai lebar penuh halaman agar teks tetap jelas.
+   */
+  function downloadCanvasAsPdf(canvas, fileName) {
+    const { jsPDF } = window.jspdf;
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+
+    const margin = 8;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const usableWidth = pageWidth - (margin * 2);
+    const usableHeight = pageHeight - (margin * 2);
+
+    const pixelsPerMm = canvas.width / usableWidth;
+    const pageSliceHeightPx = Math.max(
+      1,
+      Math.floor(usableHeight * pixelsPerMm)
+    );
+
+    let sourceY = 0;
+    let pageIndex = 0;
+
+    while (sourceY < canvas.height) {
+      const sliceHeight = Math.min(
+        pageSliceHeightPx,
+        canvas.height - sourceY
+      );
+
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceHeight;
+
+      const context = sliceCanvas.getContext('2d');
+      context.fillStyle = '#f4f7fb';
+      context.fillRect(
+        0,
+        0,
+        sliceCanvas.width,
+        sliceCanvas.height
+      );
+
+      context.drawImage(
+        canvas,
+        0,
+        sourceY,
+        canvas.width,
+        sliceHeight,
+        0,
+        0,
+        canvas.width,
+        sliceHeight
+      );
+
+      const renderedHeightMm = sliceHeight / pixelsPerMm;
+      const imageData = sliceCanvas.toDataURL(
+        'image/jpeg',
+        0.96
+      );
+
+      if (pageIndex > 0) {
+        pdf.addPage();
+      }
+
+      pdf.addImage(
+        imageData,
+        'JPEG',
+        margin,
+        margin,
+        usableWidth,
+        renderedHeightMm,
+        undefined,
+        'FAST'
+      );
+
+      sourceY += sliceHeight;
+      pageIndex++;
+    }
+
+    pdf.save(fileName);
+  }
+
+  function downloadCurrentMenuExcel() {
+    try {
+      ensureXlsxReady();
+      if (!state.currentData) throw new Error('Data menu belum tersedia.');
+
+      const workbook = XLSX.utils.book_new();
+      const current = state.currentData;
+
+      if (current.type === 'pivot') {
+        appendPivotSheet(workbook, current.data, safeSheetName(`Andil ${metricLabel(current.metric)}`));
+      } else if (current.type === 'rank') {
+        appendRankSheet(workbook, current.data, safeSheetName(`Komoditas ${metricLabel(current.metric)}`));
+      } else if (current.type === 'recap') {
+        appendRecapSheet(workbook, current.data, 'Rekap Inflasi');
+      } else {
+        throw new Error('Menu ini belum memiliki data yang dapat diekspor.');
+      }
+
+      XLSX.writeFile(workbook, makeExcelFilename(currentMenuFilename()));
+      showToast('File Excel berhasil dibuat.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error), 'error');
+    }
+  }
+
+  function downloadAllMenusExcel() {
+    setLoading(true);
+    server('getAllExportData', state.token)
+      .then(all => {
+        ensureXlsxReady();
+        const workbook = XLSX.utils.book_new();
+
+        appendPivotSheet(workbook, all.pivotMtm, 'Andil MtM');
+        appendPivotSheet(workbook, all.pivotYtd, 'Andil YtD');
+        appendPivotSheet(workbook, all.pivotYoy, 'Andil YoY');
+        appendPivotSheet(workbook, all.inflationMtm, 'Inflasi MtM');
+        appendPivotSheet(workbook, all.inflationYtd, 'Inflasi YtD');
+        appendPivotSheet(workbook, all.inflationYoy, 'Inflasi YoY');
+        appendRankSheet(workbook, all.rankMtm, 'Komoditas MtM');
+        appendRankSheet(workbook, all.rankYtd, 'Komoditas YtD');
+        appendRankSheet(workbook, all.rankYoy, 'Komoditas YoY');
+        appendRecapSheet(workbook, all.recap, 'Rekap Inflasi');
+
+        XLSX.writeFile(workbook, makeExcelFilename('Semua_Menu_Andil_Inflasi'));
+        showToast('Workbook seluruh menu berhasil dibuat.', 'success');
+      })
+      .catch(handleServerError)
+      .finally(() => setLoading(false));
+  }
+
+  function appendPivotSheet(workbook, data, sheetName) {
+    const headers = ['No', 'Kode Komoditas', 'Nama Komoditas']
+      .concat(data.regions.map(region => `${region.code} - ${region.name}`));
+
+    const rows = data.rows.map((row, index) => [
+      index + 1,
+      row.commodityCode,
+      row.commodityName,
+      ...data.regions.map(region => excelNumber(row.values[region.code]))
+    ]);
+
+    const aoa = [
+      [data.title],
+      [`Kondisi Data: ${data.condition}`],
+      [],
+      headers,
+      ...rows
+    ];
+
+    appendAoaSheet(workbook, aoa, sheetName, [6, 18, 40, ...data.regions.map(() => 18)]);
+  }
+
+  function appendRankSheet(workbook, data, sheetName) {
+    const rows = [];
+    data.regions.forEach(region => {
+      (region.lowest || []).forEach((item, index) => rows.push([
+        region.code, region.name, '10 Terendah', index + 1,
+        item.commodityCode, item.commodityName, excelNumber(item.value)
+      ]));
+      (region.highest || []).forEach((item, index) => rows.push([
+        region.code, region.name, '10 Tertinggi', index + 1,
+        item.commodityCode, item.commodityName, excelNumber(item.value)
+      ]));
+    });
+
+    const aoa = [
+      [`Komoditas Andil ${data.metric}`],
+      [`Kondisi Data: ${data.condition}`],
+      [],
+      ['Kode Wilayah', 'Nama Wilayah', 'Kategori', 'Peringkat', 'Kode Komoditas', 'Nama Komoditas', `Andil ${data.metric}`],
+      ...rows
+    ];
+
+    appendAoaSheet(workbook, aoa, sheetName, [14, 30, 16, 12, 18, 40, 16]);
+  }
+
+  function appendRecapSheet(workbook, data, sheetName) {
+    const rows = data.rows.map((row, index) => [
+      index + 1, row.code, row.name,
+      excelNumber(row.mtm), excelNumber(row.ytd), excelNumber(row.yoy)
+    ]);
+
+    const aoa = [
+      ['Rekap Inflasi Kabupaten/Kota'],
+      [`Kondisi Data: ${data.condition}`],
+      [],
+      ['No', 'Kode', 'Kabupaten/Kota', 'MtM', 'YtD', 'YoY'],
+      ...rows
+    ];
+
+    appendAoaSheet(workbook, aoa, sheetName, [6, 14, 35, 14, 14, 14]);
+  }
+
+  function appendAoaSheet(workbook, aoa, sheetName, widths) {
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    worksheet['!cols'] = widths.map(width => ({ wch: width }));
+    worksheet['!freeze'] = { xSplit: 0, ySplit: 4, topLeftCell: 'A5', activePane: 'bottomLeft', state: 'frozen' };
+    XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName(sheetName));
+  }
+
+  function excelNumber(value) {
+    return value === null || value === undefined || value === '' ? null : Number(value);
+  }
+
+  function metricLabel(metric) {
+    return String(metric || '').toLowerCase() === 'mtm' ? 'MtM' :
+      String(metric || '').toLowerCase() === 'ytd' ? 'YtD' : 'YoY';
+  }
+
+  function currentMenuFilename() {
+    if (state.currentData.type === 'pivot') return `Andil_${metricLabel(state.currentData.metric)}`;
+    if (state.currentData.type === 'inflation') {
+      const selectedFlag =
+        state.currentData.data &&
+        state.currentData.data.selectedFlag;
+
+      const flagSuffix = selectedFlag === '__ALL__'
+        ? '_Semua_Flag'
+        : selectedFlag
+          ? `_Flag_${selectedFlag}`
+          : '';
+
+      return `Inflasi_${metricLabel(state.currentData.metric)}${flagSuffix}`;
+    }
+    if (state.currentData.type === 'rank') return `Komoditas_Andil_${metricLabel(state.currentData.metric)}`;
+    if (state.currentData.type === 'recap') return 'Rekap_Inflasi';
+    return 'Data_Inflasi';
+  }
+
+  function makeExcelFilename(baseName) {
+    const stamp = new Date().toISOString().slice(0, 10);
+    return `${baseName}_${stamp}.xlsx`;
+  }
+
+  function safeSheetName(name) {
+    return String(name || 'Sheet').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31);
+  }
+
+  /**
+   * Membuka spreadsheet sumber langsung pada tab data yang dipakai aplikasi.
+   * Jendela dibuka terlebih dahulu agar tidak diblokir browser sebagai popup.
+   */
+  function openRawData() {
+    const newTab = window.open('', '_blank');
+
+    if (!newTab) {
+      showToast(
+        'Browser memblokir tab baru. Izinkan pop-up untuk membuka raw data.',
+        'error'
+      );
+      return;
+    }
+
+    newTab.document.write(
+      '<!DOCTYPE html><html><head><title>Membuka Raw Data...</title></head>' +
+      '<body style="font-family:Arial,sans-serif;padding:24px">' +
+      '<p>Membuka spreadsheet sumber...</p></body></html>'
+    );
+
+    server('getRawDataUrl', state.token)
+      .then(result => {
+        if (!result || !result.success || !result.url) {
+          throw new Error('URL raw data tidak tersedia.');
+        }
+
+        newTab.location.replace(result.url);
+        showToast(
+          'Raw data dibuka: ' + result.spreadsheetName +
+          ' — ' + result.sheetName,
+          'success'
+        );
+      })
+      .catch(error => {
+        try {
+          newTab.close();
+        } catch (closeError) {}
+
+        handleServerError(error);
+      });
+  }
+
+  function openConditionModal() {
+    setLoading(true);
+
+    server('getSettings', state.token)
+      .then(data => {
+        document.getElementById('quickConditionInput').value =
+          data.conditionValue || getCurrentDateTimeLocal();
+
+        document.getElementById('quickStatusInput').value =
+          data.dataStatus || 'Angka Sementara';
+
+        document.getElementById('conditionModal').classList.remove('hidden');
+      })
+      .catch(handleServerError)
+      .finally(() => setLoading(false));
+  }
+
+  function closeConditionModal() {
+    document.getElementById('conditionModal').classList.add('hidden');
+  }
+
+  function saveQuickCondition(event) {
+    event.preventDefault();
+
+    const dateTimeValue = document
+      .getElementById('quickConditionInput')
+      .value;
+
+    const dataStatus = document
+      .getElementById('quickStatusInput')
+      .value;
+
+    if (!dateTimeValue) {
+      showToast('Silakan pilih tanggal dan jam kondisi data.', 'error');
+      return;
+    }
+
+    setLoading(true);
+
+    server('saveDataCondition', state.token, dateTimeValue, dataStatus)
+      .then(result => {
+        updateCondition(result.condition);
+        closeConditionModal();
+        showToast('Kondisi data dan status angka berhasil diperbarui.', 'success');
+        refreshCurrentView();
+      })
+      .catch(handleServerError)
+      .finally(() => setLoading(false));
+  }
+
+  function getCurrentDateTimeLocal() {
+    const now = new Date();
+    const timezoneOffset = now.getTimezoneOffset() * 60000;
+
+    return new Date(now.getTime() - timezoneOffset)
+      .toISOString()
+      .slice(0, 16);
+  }
+
+  function saveCondition(event) {
+    event.preventDefault();
+    const condition = document.getElementById('conditionInput').value.trim();
+    const dataStatus = document.getElementById('dataStatusInput').value;
+
+    setLoading(true);
+    server('saveDataCondition', state.token, condition, dataStatus)
+      .then(result => {
+        updateCondition(result.condition);
+        showToast('Kondisi data dan status angka berhasil disimpan.', 'success');
+      })
+      .catch(handleServerError)
+      .finally(() => setLoading(false));
+  }
+
+  function saveLoginSetting(event) {
+    event.preventDefault();
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value;
+    setLoading(true);
+    server('changeLogin', state.token, username, password)
+      .then(result => {
+        document.getElementById('loginSettingForm').reset();
+        showToast(result.message, 'success');
+      })
+      .catch(handleServerError)
+      .finally(() => setLoading(false));
+  }
+
+  function runDataRequest(functionName, args, render, showLoading = true) {
+    if (showLoading) setLoading(true);
+
+    state.lastRequest = { functionName, args, render };
+
+    server(functionName, ...args)
+      .then(render)
+      .catch(handleServerError)
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
+  }
+
+  function server(functionName, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[functionName](...args);
+    });
+  }
+
+  function handleServerError(error) {
+    const message = getErrorMessage(error);
+    if (message.includes('SESSION_EXPIRED') || message.toLowerCase().includes('sesi')) {
+      forceLogout(false);
+      showToast('Sesi berakhir. Silakan login kembali.', 'error');
+      return;
+    }
+    setContent(`<div class="panel"><div class="empty-state"><strong>Data gagal dimuat</strong><p>${escapeHtml(message)}</p></div></div>`);
+    showToast(message, 'error');
+  }
+
+  function forceLogout(callServer) {
+    const oldToken = state.token;
+    stopAutoRefresh();
+    state.token = '';
+    sessionStorage.removeItem('inflationAppToken');
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('loginPage').classList.remove('hidden');
+    document.getElementById('password').value = '';
+    if (callServer && oldToken) server('logout', oldToken).catch(() => {});
+  }
+
+  function updateCondition(condition) {
+    state.condition = condition || '-';
+    document.getElementById('topCondition').textContent = state.condition;
+    document.getElementById('sidebarCondition').textContent = state.condition;
+  }
+
+  function setContent(html) {
+    document.getElementById('content').innerHTML = html;
+  }
+
+  function setLoading(show) {
+    document.getElementById('loadingOverlay').classList.toggle('hidden', !show);
+  }
+
+  function statCard(label, value, note) {
+    return `<div class="stat-card"><span class="stat-label">${escapeHtml(label)}</span><strong>${Number(value || 0).toLocaleString('id-ID')}</strong><small>${escapeHtml(note)}</small></div>`;
+  }
+
+  function formatNumber(value) {
+    if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
+      return '<span class="empty-cell">–</span>';
+    }
+    return Number(value).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function nearlyEqual(a, b) {
+    return Math.abs(Number(a) - Number(b)) < 1e-10;
+  }
+
+  function emptyRow(colspan) {
+    return `<tr><td colspan="${colspan}" class="empty-state">Tidak ada data yang memenuhi filter.</td></tr>`;
+  }
+
+  function getErrorMessage(error) {
+    return (error && error.message) ? error.message : String(error || 'Terjadi kesalahan.');
+  }
+
+  function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'success');
+    toast.textContent = message;
+    document.getElementById('toastContainer').appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+  }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, '&#096;');
+  }
+</script>
