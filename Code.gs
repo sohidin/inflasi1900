@@ -9,7 +9,10 @@ const CONFIG = {
   FILTER_CACHE_SECONDS: 21600,
 
   // Hasil tabel per kombinasi filter disimpan 10 menit.
-  DATA_CACHE_SECONDS: 600
+  DATA_CACHE_SECONDS: 600,
+
+  // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
+  CACHE_VERSION: "v6"
 };
 
 function doGet(e) {
@@ -108,7 +111,7 @@ function sheet_(source) {
  */
 function getPeriodRows_(source, year, month) {
   const cache = CacheService.getScriptCache();
-  const cacheKey = "period:" + source + ":" + year + ":" + month;
+  const cacheKey = CONFIG.CACHE_VERSION + ":period:" + source + ":" + year + ":" + month;
   const cached = cache.get(cacheKey);
   if (cached) return JSON.parse(cached);
 
@@ -118,44 +121,55 @@ function getPeriodRows_(source, year, month) {
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
 
-  // Baca hanya A:B untuk menemukan SEMUA baris tahun-bulan,
-  // bukan hanya blok pertama. Ini penting karena data Final
-  // dapat terpisah per kode kota.
-  const ym = sh.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+  /*
+   * DATA FINAL tersusun per blok Kode Kota.
+   * Contoh: seluruh periode 1900 selesai dahulu,
+   * lalu blok 1902 dimulai lagi dari periode awal.
+   *
+   * Karena itu TIDAK boleh berhenti setelah blok periode pertama.
+   * Kita scan A:C yang relatif ringan untuk menemukan semua baris
+   * dengan Tahun+Bulan yang diminta pada SELURUH kode kota.
+   */
+  const meta = sh.getRange(2, 1, lastRow - 1, 3).getDisplayValues();
 
-  const indices = [];
-  for (let i = 0; i < ym.length; i++) {
-    if (clean_(ym[i][0]) === String(year) && clean_(ym[i][1]) === String(month)) {
-      indices.push(i + 2); // nomor baris spreadsheet
+  const matchedRows = [];
+  for (let i = 0; i < meta.length; i++) {
+    if (clean_(meta[i][0]) === String(year) &&
+        clean_(meta[i][1]) === String(month)) {
+      matchedRows.push(i + 2);
     }
   }
-  if (!indices.length) return [];
+  if (!matchedRows.length) return [];
 
-  // Kelompokkan baris berurutan menjadi beberapa segmen.
+  // Gabungkan nomor baris berurutan menjadi segmen supaya panggilan getRange sedikit.
   const segments = [];
-  let start = indices[0], prev = indices[0];
-  for (let i = 1; i < indices.length; i++) {
-    const cur = indices[i];
+  let start = matchedRows[0];
+  let prev = matchedRows[0];
+
+  for (let i = 1; i < matchedRows.length; i++) {
+    const cur = matchedRows[i];
     if (cur === prev + 1) {
       prev = cur;
     } else {
-      segments.push([start, prev]);
+      segments.push({start:start, count:prev-start+1});
       start = cur;
       prev = cur;
     }
   }
-  segments.push([start, prev]);
+  segments.push({start:start, count:prev-start+1});
 
   let rows = [];
   segments.forEach(seg => {
-    const count = seg[1] - seg[0] + 1;
-    const part = sh.getRange(seg[0], 1, count, cfg.lastCol).getDisplayValues();
+    const part = sh.getRange(seg.start, 1, seg.count, cfg.lastCol).getDisplayValues();
     rows = rows.concat(part);
   });
 
+  // Cache hanya jika ukurannya memungkinkan. Hasil pivot sendiri juga di-cache.
   try {
     const txt = JSON.stringify(rows);
-    if (txt.length < 95000) cache.put(cacheKey, txt, CONFIG.DATA_CACHE_SECONDS);
+    if (txt.length < 95000) {
+      cache.put(cacheKey, txt, CONFIG.DATA_CACHE_SECONDS);
+    }
   } catch (e) {}
 
   return rows;
@@ -163,7 +177,7 @@ function getPeriodRows_(source, year, month) {
 
 function getFilters_(source) {
   const cache = CacheService.getScriptCache();
-  const key = "filters:" + source;
+  const key = CONFIG.CACHE_VERSION + ":filters:" + source;
   const cached = cache.get(key);
   if (cached) return JSON.parse(cached);
 
@@ -173,16 +187,18 @@ function getFilters_(source) {
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return {years:[],flags:[],cities:[],monthsByYear:{}};
 
-  // Hanya baca kolom A:G satu kali untuk metadata filter.
-  const rows = sh.getRange(2,1,lastRow-1,7).getDisplayValues();
+  // Metadata filter: baca A:D dan G saja. Tidak perlu E:F.
+  const mainMeta = sh.getRange(2,1,lastRow-1,4).getDisplayValues();
+  const flagMeta = sh.getRange(2,7,lastRow-1,1).getDisplayValues();
 
   const years = {};
   const monthsByYear = {};
   const flags = {};
   const cities = {};
 
-  rows.forEach(r => {
-    const y=clean_(r[0]), m=clean_(r[1]), code=clean_(r[2]), name=clean_(r[3]), flag=clean_(r[6]);
+  mainMeta.forEach((r,i) => {
+    const y=clean_(r[0]), m=clean_(r[1]), code=clean_(r[2]), name=clean_(r[3]);
+    const flag=clean_(flagMeta[i] ? flagMeta[i][0] : "");
     if(y){
       years[y]=true;
       if(!monthsByYear[y]) monthsByYear[y]={};
@@ -222,7 +238,7 @@ function getPivotTable_(p) {
   if (!year || !month || flag === "") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
   const cache = CacheService.getScriptCache();
-  const key = ["pivot",source,period,view,year,month,flag].join(":");
+  const key = [CONFIG.CACHE_VERSION,"pivot",source,period,view,year,month,flag].join(":");
   const cached = cache.get(key);
   if(cached) return JSON.parse(cached);
 
@@ -250,7 +266,14 @@ function getPivotTable_(p) {
     matrix[commodityCode][cityCode]=toNumber_(r[metricCol-1]);
   });
 
-  const cityCodes=Object.keys(cityMap).sort(numericSort_);
+  // Urutan kab/kota utama sesuai kebutuhan dashboard.
+  const preferredCities=["1902","1903","1906","1971","1900"];
+  const cityCodes=preferredCities.filter(code=>cityMap[code]);
+  Object.keys(cityMap)
+    .filter(code=>preferredCities.indexOf(code)===-1)
+    .sort(numericSort_)
+    .forEach(code=>cityCodes.push(code));
+
   const commodityCodes=Object.keys(commodityMap).sort(numericSort_);
 
   const result = {
@@ -276,7 +299,7 @@ function getHeadline_(p) {
   const month=String(p.month||"");
   if(!year||!month) throw new Error("Tahun dan bulan harus dipilih.");
 
-  const key=["headline",source,year,month].join(":");
+  const key=[CONFIG.CACHE_VERSION,"headline",source,year,month].join(":");
   const cache=CacheService.getScriptCache();
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);
@@ -324,7 +347,7 @@ function getCommodity_(p) {
 
   if(!year||!month||flag==="") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
-  const key=["commodityAll",source,period,year,month,flag,mode].join(":");
+  const key=[CONFIG.CACHE_VERSION,"commodityAll",source,period,year,month,flag,mode].join(":");
   const cache=CacheService.getScriptCache();
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);

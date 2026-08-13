@@ -9,6 +9,7 @@ const state = {
   view: "inflasi",
   filters: null,
   mainDt: null,
+  commodityData: null,
 };
 
 const Api = {
@@ -119,6 +120,9 @@ function bindAppEvents(){
   document.getElementById("logoutBtn").addEventListener("click", () => {
     sessionStorage.clear();
     showLogin();
+  });
+  document.getElementById("spreadsheetBtn")?.addEventListener("click", () => {
+    window.open("https://docs.google.com/spreadsheets/d/1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI/edit", "_blank");
   });
   document.getElementById("editUpdatedAtBtn").addEventListener("click", () => {
     document.getElementById("updatedAtModal").classList.remove("hidden");
@@ -243,6 +247,7 @@ function renderStandard(r){
   });
 }
 function renderCommodity(r){
+  state.commodityData = r;
   document.getElementById("standardTableSection").classList.add("hidden");
   document.getElementById("commoditySection").classList.remove("hidden");
 
@@ -292,7 +297,7 @@ function commodityHtmlTable(rows){
         <td>${r[0]}</td>
         <td>${escapeHtml(r[1])}</td>
         <td>${escapeHtml(r[2])}</td>
-        <td class="${cls}">${Number(r[3]).toLocaleString("id-ID",{maximumFractionDigits:4})}</td>
+        <td class="${cls}">${Number(r[3]).toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       </tr>`;
     });
   }
@@ -308,7 +313,7 @@ function renderCell(data,type){
   if(type!=="display") return data;
   if(typeof data==="number"){
     const cls=data>0?"positive":data<0?"negative":"";
-    return `<span class="${cls}">${data.toLocaleString("id-ID",{maximumFractionDigits:4})}</span>`;
+    return `<span class="${cls}">${data.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
   }
   return data ?? "";
 }
@@ -343,71 +348,156 @@ async function saveUpdatedAt(){
   }catch(err){alert(err.message);}
 }
 async function downloadCommodityPageImage(){
+  // Export container SELURUH kab/kota, bukan tabel pertama.
   const el = document.getElementById("commoditySection");
-  const canvas = await html2canvas(el,{backgroundColor:"#f4f7fb",scale:1.5,useCORS:true});
-  const a=document.createElement("a");
-  a.download=exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.png";
-  a.href=canvas.toDataURL("image/png");
-  a.click();
+  const original = el.style.width;
+  try{
+    // Lebar ekspor konsisten supaya seluruh kartu kab/kota masuk.
+    el.style.width = "1400px";
+    const canvas = await html2canvas(el,{
+      backgroundColor:"#f4f7fb",
+      scale:1.25,
+      useCORS:true,
+      windowWidth:1500,
+      scrollX:0,
+      scrollY:0
+    });
+    const a=document.createElement("a");
+    a.download=safeName(exportTitle()+"-semua-kabkot")+".png";
+    a.href=canvas.toDataURL("image/png");
+    a.click();
+  }finally{
+    el.style.width=original;
+  }
 }
 
-async function downloadCommodityPagePdf(){
-  const el = document.getElementById("commoditySection");
-  const canvas = await html2canvas(el,{backgroundColor:"#fff",scale:1.4,useCORS:true});
-  const img = canvas.toDataURL("image/png");
-  const pageWidth = 841.89;
-  const margin = 18;
-  const usable = pageWidth - margin*2;
-  const ratio = canvas.height / canvas.width;
-  const imgHeight = usable * ratio;
+function downloadCommodityPagePdf(){
+  const data = state.commodityData?.cities || [];
+  if(!data.length){ alert("Data komoditas belum tersedia."); return; }
 
-  const doc = {
+  // PDF disusun dari DATA seluruh kab/kota, bukan screenshot elemen pertama.
+  // Setiap kab/kota berisi dua tabel; semuanya masuk dalam satu file PDF.
+  const content = [
+    {text:viewTitle(), style:"title"},
+    {text:`${state.source==="asem"?"Angka Sementara":"Angka Final Inflasi"} • Tahun ${valueOf("filterYear")} • Bulan ${valueOf("filterMonth")} • Flag ${valueOf("filterFlag")}`, style:"subtitle", margin:[0,0,0,10]}
+  ];
+
+  data.forEach((city, idx)=>{
+    if(idx>0) content.push({text:"", pageBreak:"before"});
+    content.push({
+      columns:[
+        {text:`${city.code} - ${city.name}`, style:"cityTitle"},
+        {text:`Kab/Kota ${idx+1} dari ${data.length}`, alignment:"right", color:"#718096", fontSize:8}
+      ],
+      margin:[0,0,0,8]
+    });
+    content.push({
+      columns:[
+        {width:"*", stack:[
+          {text:"Andil Terendah", style:"sectionLow"},
+          commodityPdfTable(city.lowest)
+        ]},
+        {width:12,text:""},
+        {width:"*", stack:[
+          {text:"Andil Tertinggi", style:"sectionHigh"},
+          commodityPdfTable(city.highest)
+        ]}
+      ]
+    });
+  });
+
+  pdfMake.createPdf({
     pageSize:"A4",
     pageOrientation:"landscape",
-    pageMargins:[margin,margin,margin,margin],
-    content:[{image:img,width:usable}],
-    defaultStyle:{fontSize:8}
-  };
-  pdfMake.createPdf(doc).download(
-    exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.pdf"
-  );
+    pageMargins:[24,24,24,24],
+    content,
+    styles:{
+      title:{fontSize:16,bold:true,color:"#0b355a"},
+      subtitle:{fontSize:9,color:"#718096"},
+      cityTitle:{fontSize:12,bold:true,color:"#0b355a"},
+      sectionLow:{fontSize:10,bold:true,color:"#b42318",margin:[0,0,0,5]},
+      sectionHigh:{fontSize:10,bold:true,color:"#067647",margin:[0,0,0,5]}
+    },
+    defaultStyle:{fontSize:7}
+  }).download(safeName(exportTitle()+"-semua-kabkot")+".pdf");
 }
 
-function getCommodityRowsFromDom(){
+function commodityPdfTable(rows){
+  const body=[[
+    {text:"No",bold:true},{text:"Kode",bold:true},{text:"Nama Komoditas",bold:true},{text:"Andil",bold:true}
+  ]];
+  (rows||[]).forEach(r=>body.push([
+    String(r[0]),String(r[1]),String(r[2]),
+    Number(r[3]).toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})
+  ]));
+  if(body.length===1) body.push(["","","Tidak ada data",""]);
+  return {
+    table:{headerRows:1,widths:[22,55,"*",48],body},
+    layout:"lightHorizontalLines"
+  };
+}
+
+function commodityFlatRows(){
   const rows=[];
-  document.querySelectorAll(".city-section").forEach(sec=>{
-    const code=sec.querySelector(".city-code-badge")?.textContent.trim()||"";
-    const name=sec.querySelector("h3")?.textContent.trim()||"";
-    sec.querySelectorAll(".city-table-card").forEach(card=>{
-      const type=card.classList.contains("low")?"Terendah":"Tertinggi";
-      card.querySelectorAll("tbody tr").forEach(tr=>{
-        const td=[...tr.querySelectorAll("td")].map(x=>x.textContent.trim());
-        if(td.length===4 && td[0] && td[0]!=="Tidak ada data"){
-          rows.push([code,name,type,td[0],td[1],td[2],td[3]]);
-        }
-      });
-    });
+  (state.commodityData?.cities || []).forEach(city=>{
+    (city.lowest||[]).forEach(r=>rows.push([
+      city.code,city.name,"Terendah",r[0],r[1],r[2],round2(r[3])
+    ]));
+    (city.highest||[]).forEach(r=>rows.push([
+      city.code,city.name,"Tertinggi",r[0],r[1],r[2],round2(r[3])
+    ]));
   });
   return rows;
 }
 
 function downloadCommodityCsv(){
-  const rows=getCommodityRowsFromDom();
+  const rows=commodityFlatRows();
   const all=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
-  const csv=all.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const csv=all.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n");
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.csv";
+  const url=URL.createObjectURL(blob);
+  a.href=url;
+  a.download=safeName(exportTitle()+"-semua-kabkot")+".csv";
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(()=>URL.revokeObjectURL(url),500);
 }
 
 function downloadCommodityWorkbook(){
-  const rows=getCommodityRowsFromDom();
-  const data=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
-  const ws=XLSX.utils.aoa_to_sheet(data);
+  const rows=commodityFlatRows();
+  if(!rows.length){ alert("Data komoditas belum tersedia."); return; }
+
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"Komoditas Andil");
-  XLSX.writeFile(wb,exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.xlsx");
+
+  // Sheet Ringkasan: seluruh kab/kota sekaligus.
+  const summary=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),"Semua KabKota");
+
+  // Tambahkan sheet per kab/kota agar lebih mudah dianalisis.
+  (state.commodityData?.cities || []).forEach(city=>{
+    const arr=[
+      [`${city.code} - ${city.name}`],
+      [],
+      ["ANDIL TERENDAH"],
+      ["No","Kode Komoditas","Nama Komoditas","Andil"],
+      ...(city.lowest||[]),
+      [],
+      ["ANDIL TERTINGGI"],
+      ["No","Kode Komoditas","Nama Komoditas","Andil"],
+      ...(city.highest||[])
+    ];
+    const name=String(city.code).substring(0,31);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(arr),name);
+  });
+
+  XLSX.writeFile(wb,safeName(exportTitle()+"-semua-kabkot")+".xlsx");
+}
+
+function safeName(v){
+  return String(v||"export").replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();
+}
+
+function round2(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : v;
 }

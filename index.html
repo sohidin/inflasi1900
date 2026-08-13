@@ -44,76 +44,81 @@
   <div id="appPage" class="app hidden">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon">BPS</div>
+        <div class="brand-icon">IF</div>
         <div>
-          <strong>Inflasi 1900</strong>
-          <span>Monitoring Dashboard</span>
+          <strong>Monitoring Inflasi</strong>
+          <span>Rekap dan Analisis</span>
         </div>
       </div>
 
       <div class="menu-root">
+        <div class="menu-caption">DATA INFLASI</div>
         <button class="menu-main" data-menu="asem">
-          <span>Angka Sementara</span>
+          <span class="menu-label"><span class="menu-icon">◫</span>Angka Sementara</span>
           <span class="chevron">⌄</span>
         </button>
 
         <div class="submenu" id="submenu-asem">
-          <button class="submenu-parent" data-group="asem-mtm">MtM <span>›</span></button>
+          <button class="submenu-parent" data-group="asem-mtm"><span class="sub-label"><span class="sub-icon">↔</span>MtM</span><span>›</span></button>
           <div class="submenu-level2" id="asem-mtm">
-            <button data-source="asem" data-period="mtm" data-view="inflasi">Inflasi MtM</button>
-            <button data-source="asem" data-period="mtm" data-view="andil">Andil MtM</button>
-            <button data-source="asem" data-period="mtm" data-view="komoditas">Komoditas Andil MtM</button>
+            <button data-source="asem" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</button>
+            <button data-source="asem" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</button>
+            <button data-source="asem" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</button>
           </div>
 
-          <button class="submenu-parent" data-group="asem-ytd">YtD <span>›</span></button>
+          <button class="submenu-parent" data-group="asem-ytd"><span class="sub-label"><span class="sub-icon">↗</span>YtD</span><span>›</span></button>
           <div class="submenu-level2" id="asem-ytd">
-            <button data-source="asem" data-period="ytd" data-view="inflasi">Inflasi YtD</button>
-            <button data-source="asem" data-period="ytd" data-view="andil">Andil YtD</button>
-            <button data-source="asem" data-period="ytd" data-view="komoditas">Komoditas Andil YtD</button>
+            <button data-source="asem" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</button>
+            <button data-source="asem" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</button>
+            <button data-source="asem" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</button>
           </div>
 
-          <button class="submenu-parent" data-group="asem-yoy">YoY <span>›</span></button>
+          <button class="submenu-parent" data-group="asem-yoy"><span class="sub-label"><span class="sub-icon">◌</span>YoY</span><span>›</span></button>
           <div class="submenu-level2" id="asem-yoy">
-            <button data-source="asem" data-period="yoy" data-view="inflasi">Inflasi YoY</button>
-            <button data-source="asem" data-period="yoy" data-view="andil">Andil YoY</button>
-            <button data-source="asem" data-period="yoy" data-view="komoditas">Komoditas Andil YoY</button>
+            <button data-source="asem" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</button>
+            <button data-source="asem" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</button>
+            <button data-source="asem" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</button>
           </div>
 
-          <button data-source="asem" data-view="headline" class="leaf-main">Inflasi Asem</button>
+          <button data-source="asem" data-view="headline" class="leaf-main"><span class="leaf-icon">▦</span>Inflasi Asem</button>
         </div>
 
+        <div class="menu-caption second">DATA FINAL</div>
         <button class="menu-main" data-menu="final">
-          <span>Angka Final Inflasi</span>
+          <span class="menu-label"><span class="menu-icon">◆</span>Angka Final Inflasi</span>
           <span class="chevron">⌄</span>
         </button>
 
         <div class="submenu" id="submenu-final">
-          <button class="submenu-parent" data-group="final-mtm">MtM <span>›</span></button>
+          <button class="submenu-parent" data-group="final-mtm"><span class="sub-label"><span class="sub-icon">↔</span>MtM</span><span>›</span></button>
           <div class="submenu-level2" id="final-mtm">
-            <button data-source="final" data-period="mtm" data-view="inflasi">Inflasi MtM</button>
-            <button data-source="final" data-period="mtm" data-view="andil">Andil MtM</button>
-            <button data-source="final" data-period="mtm" data-view="komoditas">Komoditas Andil MtM</button>
+            <button data-source="final" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</button>
+            <button data-source="final" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</button>
+            <button data-source="final" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</button>
           </div>
 
-          <button class="submenu-parent" data-group="final-ytd">YtD <span>›</span></button>
+          <button class="submenu-parent" data-group="final-ytd"><span class="sub-label"><span class="sub-icon">↗</span>YtD</span><span>›</span></button>
           <div class="submenu-level2" id="final-ytd">
-            <button data-source="final" data-period="ytd" data-view="inflasi">Inflasi YtD</button>
-            <button data-source="final" data-period="ytd" data-view="andil">Andil YtD</button>
-            <button data-source="final" data-period="ytd" data-view="komoditas">Komoditas Andil YtD</button>
+            <button data-source="final" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</button>
+            <button data-source="final" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</button>
+            <button data-source="final" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</button>
           </div>
 
-          <button class="submenu-parent" data-group="final-yoy">YoY <span>›</span></button>
+          <button class="submenu-parent" data-group="final-yoy"><span class="sub-label"><span class="sub-icon">◌</span>YoY</span><span>›</span></button>
           <div class="submenu-level2" id="final-yoy">
-            <button data-source="final" data-period="yoy" data-view="inflasi">Inflasi YoY</button>
-            <button data-source="final" data-period="yoy" data-view="andil">Andil YoY</button>
-            <button data-source="final" data-period="yoy" data-view="komoditas">Komoditas Andil YoY</button>
+            <button data-source="final" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</button>
+            <button data-source="final" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</button>
+            <button data-source="final" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</button>
           </div>
 
-          <button data-source="final" data-view="headline" class="leaf-main">Inflasi Final</button>
+          <button data-source="final" data-view="headline" class="leaf-main"><span class="leaf-icon">▦</span>Inflasi Final</button>
         </div>
       </div>
 
-      <button id="logoutBtn" class="logout-btn">Keluar</button>
+      <div class="sidebar-bottom">
+        <button id="spreadsheetBtn" class="sheet-btn">Buka Spreadsheet ↗</button>
+        <button id="logoutBtn" class="logout-btn">Keluar</button>
+      </div>
     </aside>
 
     <main class="main">
@@ -207,10 +212,11 @@
             <p id="commodityPageInfo">Tabel ditampilkan per kabupaten/kota.</p>
           </div>
           <div class="commodity-downloads">
+            <span class="download-label">Download semua kab/kota:</span>
             <button id="downloadCommodityExcel" class="btn">Excel</button>
             <button id="downloadCommodityCsv" class="btn">CSV</button>
-            <button id="downloadCommodityPdf" class="btn">PDF 1 Page</button>
-            <button id="downloadCommodityImage" class="btn btn-primary">Image 1 Page</button>
+            <button id="downloadCommodityPdf" class="btn">PDF</button>
+            <button id="downloadCommodityImage" class="btn btn-primary">Image</button>
           </div>
         </div>
 

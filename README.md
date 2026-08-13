@@ -52,3 +52,32 @@ Ganti:
 - `README.md`
 
 Jangan lupa isi `API_URL` di bagian atas `script.js`.
+
+
+## V4
+- Sidebar redesign mengikuti referensi visual.
+- Tetap menggunakan hide/unhide/accordion.
+- Menu utama tampil seperti card.
+- Submenu bertingkat tetap dipertahankan.
+- Tambah tombol Buka Spreadsheet di bagian bawah sidebar.
+
+
+## V5
+- Fix tabulasi Angka Final: periode yang sama dikumpulkan dari seluruh blok kode kota.
+- Cache diberi versi baru sehingga hasil lama yang hanya 1900 tidak digunakan.
+- Urutan kolom kota: 1902, 1903, 1906, 1971, 1900, lalu kode lain.
+- Komoditas Andil tetap menampilkan seluruh kab/kota.
+- Excel/CSV/PDF/Image pada Komoditas Andil mengekspor seluruh kab/kota.
+- PDF dibuat dari data seluruh kota (satu file PDF; satu halaman PDF per kab/kota agar tetap terbaca).
+- Excel berisi sheet "Semua KabKota" dan sheet tambahan per kode kota.
+- Tampilan sidebar dan konten diperhalus, tetap menggunakan hide/unhide accordion.
+
+
+## V6
+- Semua angka pada tampilan web menggunakan tepat 2 digit di belakang koma.
+- Berlaku untuk seluruh menu Inflasi, Andil Inflasi, Inflasi Asem/Final, dan Komoditas Andil.
+- PDF Komoditas Andil juga menggunakan 2 digit desimal.
+- Ekspor CSV/Excel Komoditas Andil dibulatkan ke 2 digit desimal.
+- CACHE_VERSION dinaikkan ke v6 agar cache lama yang hanya menampilkan kode kota 1900 tidak digunakan.
+- Fix Final multi-kab/kota dari V5 tetap dipertahankan.
+- Download Komoditas Andil tetap mencakup seluruh kab/kota.
