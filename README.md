@@ -1,74 +1,54 @@
-# Dashboard Inflasi 1900 — Versi 2
+# Dashboard Inflasi 1900 — Versi 3
 
-Versi ini disederhanakan menjadi hanya 5 file:
+Versi ini tetap hanya 5 file:
 
-1. `Code.gs`
-2. `README.md`
-3. `index.html`
-4. `script.js`
-5. `style.css`
+- `Code.gs`
+- `README.md`
+- `index.html`
+- `script.js`
+- `style.css`
 
-## Perbaikan versi ini
+## Perbaikan V3
 
-- Sidebar awal hanya menampilkan:
-  - Angka Sementara
-  - Angka Final Inflasi
-- Submenu tampil saat menu utama diklik.
-- MtM/YtD/YoY juga dibuat bertingkat agar sidebar tetap pendek.
-- Tampilan dibuat lebih modern dan eye catching.
-- Login tetap `harga1900 / harga1900`.
-- Semua tabel tetap dapat sort, filter/search, Excel, CSV, PDF, Image.
-- Menu komoditas tetap memiliki:
-  - Top 10 tertinggi/terendah
-  - Filter |andil| >= 0,01
-- Informasi `Data sementara per` tetap editable.
+1. **Angka Final Inflasi**
+   - Tabulasi 2 arah sekarang membaca seluruh kode kota pada tahun-bulan yang dipilih.
+   - Bug sebelumnya terjadi karena backend berhenti pada blok kode kota pertama.
 
-## Optimasi loading
+2. **Komoditas Andil**
+   - Berlaku untuk Angka Sementara dan Angka Final.
+   - Semua kabupaten/kota tampil sekaligus dalam satu halaman.
+   - Urutan prioritas:
+     1. 1902
+     2. 1903
+     3. 1906
+     4. 1971
+     5. 1900
+   - Kode kota lain, bila ada, ditampilkan setelahnya.
+   - Untuk setiap kab/kota ada dua tabel:
+     - Andil Terendah
+     - Andil Tertinggi
+   - Mode:
+     - Top 10
+     - |Andil| >= 0,01
 
-Versi sebelumnya membaca banyak kolom dari seluruh sheet final (>108 ribu baris).
+3. **Download satu halaman Komoditas Andil**
+   - Excel
+   - CSV
+   - PDF satu halaman
+   - Image satu halaman
 
-Versi ini:
-1. hanya membaca kolom A:B untuk mencari posisi blok tahun-bulan,
-2. kemudian hanya membaca baris pada tahun-bulan tersebut,
-3. hasil filter dan tabel di-cache sementara di Apps Script.
+## Cara Update
 
-Karena itu request setelah pemilihan tahun-bulan seharusnya jauh lebih cepat.
+### Apps Script
+Ganti seluruh `Code.gs`, lalu:
 
-## Cara pasang
+Deploy > Manage deployments > Edit > New version > Deploy
 
-### A. Apps Script
+### GitHub
+Ganti:
+- `index.html`
+- `script.js`
+- `style.css`
+- `README.md`
 
-1. Buka project Apps Script yang terhubung dengan spreadsheet.
-2. Ganti seluruh isi `Code.gs` dengan file `Code.gs` versi ini.
-3. Pastikan timezone project `Asia/Jakarta`.
-4. Deploy:
-   - Deploy > Manage deployments
-   - Edit deployment
-   - Version: New version
-   - Deploy
-5. Salin URL `/exec`.
-
-### B. Website GitHub
-
-1. Buka `script.js`.
-2. Ganti:
-
-```js
-API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
-```
-
-dengan URL Web App Apps Script.
-
-3. Upload 4 file web berikut ke root repository:
-   - `index.html`
-   - `script.js`
-   - `style.css`
-   - `README.md`
-
-4. Aktifkan GitHub Pages dari branch `main`.
-
-## Catatan
-
-Jumlah file frontend tidak menentukan cepat-lambat pembacaan data secara signifikan. Penyebab utama adalah ukuran data yang dibaca dari Google Sheets dan jumlah pekerjaan di Apps Script.
-
-File frontend yang lebih banyak hanya menambah beberapa request kecil. Setelah browser cache, pengaruhnya biasanya sangat kecil dibanding membaca puluhan/ratusan ribu baris spreadsheet.
+Jangan lupa isi `API_URL` di bagian atas `script.js`.

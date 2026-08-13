@@ -92,3 +92,24 @@ button,input,select{font:inherit}
 table.dataTable thead th{white-space:nowrap;background:#f8fafc;color:#3a495b}
 @media(max-width:1024px){.app{grid-template-columns:220px 1fr}.commodity-grid{grid-template-columns:1fr}.stats-strip{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.hero{display:block}.update-card{margin-top:14px;min-width:0}.main{padding:14px}.stats-strip{grid-template-columns:1fr 1fr}}
+
+.commodity-toolbar{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:15px}
+.commodity-toolbar h2{margin:4px 0 3px}
+.commodity-toolbar p{margin:0;color:var(--muted);font-size:12px}
+.commodity-downloads{display:flex;gap:8px;flex-wrap:wrap}
+.commodity-all-cities{display:flex;flex-direction:column;gap:18px}
+.city-section{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+.city-section-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:linear-gradient(135deg,#f8fbfe,#eef7fd);border-bottom:1px solid var(--line)}
+.city-section-head h3{margin:2px 0 0;font-size:17px}
+.city-code-badge{padding:6px 10px;border-radius:999px;background:#0e6da9;color:#fff;font-size:12px;font-weight:800}
+.city-tables{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px}
+.city-table-card{border:1px solid var(--line);border-radius:14px;padding:12px;overflow:hidden}
+.city-table-card h4{margin:0 0 8px;font-size:14px}
+.city-table-card.low{border-top:3px solid rgba(180,35,24,.45)}
+.city-table-card.high{border-top:3px solid rgba(6,118,71,.45)}
+.city-table-scroll{overflow:auto}
+.commodity-plain-table{width:100%;border-collapse:collapse;font-size:12px}
+.commodity-plain-table th,.commodity-plain-table td{border-bottom:1px solid #edf1f5;padding:7px 8px;text-align:left}
+.commodity-plain-table th{background:#f8fafc;white-space:nowrap}
+.commodity-plain-table td:last-child,.commodity-plain-table th:last-child{text-align:right}
+@media(max-width:900px){.city-tables{grid-template-columns:1fr}.commodity-toolbar{display:block}.commodity-downloads{margin-top:12px}}

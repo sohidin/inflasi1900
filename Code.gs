@@ -118,42 +118,41 @@ function getPeriodRows_(source, year, month) {
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
 
-  const boundKey = "bounds:" + source + ":" + year + ":" + month;
-  let bounds = cache.get(boundKey);
-  let startRow, rowCount;
+  // Baca hanya A:B untuk menemukan SEMUA baris tahun-bulan,
+  // bukan hanya blok pertama. Ini penting karena data Final
+  // dapat terpisah per kode kota.
+  const ym = sh.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
 
-  if (bounds) {
-    const b = JSON.parse(bounds);
-    startRow = b.startRow;
-    rowCount = b.rowCount;
-  } else {
-    // Hanya A:B, jauh lebih ringan daripada A:O.
-    const ym = sh.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
-
-    let first = -1, last = -1;
-    for (let i = 0; i < ym.length; i++) {
-      if (clean_(ym[i][0]) === String(year) && clean_(ym[i][1]) === String(month)) {
-        if (first === -1) first = i;
-        last = i;
-      } else if (first !== -1 && last !== -1) {
-        // Data diasumsikan terkelompok menurut tahun-bulan.
-        break;
-      }
+  const indices = [];
+  for (let i = 0; i < ym.length; i++) {
+    if (clean_(ym[i][0]) === String(year) && clean_(ym[i][1]) === String(month)) {
+      indices.push(i + 2); // nomor baris spreadsheet
     }
-
-    if (first === -1) return [];
-
-    startRow = first + 2;
-    rowCount = last - first + 1;
-
-    try {
-      cache.put(boundKey, JSON.stringify({startRow:startRow,rowCount:rowCount}), 21600);
-    } catch (e) {}
   }
+  if (!indices.length) return [];
 
-  const rows = sh.getRange(startRow, 1, rowCount, cfg.lastCol).getDisplayValues();
+  // Kelompokkan baris berurutan menjadi beberapa segmen.
+  const segments = [];
+  let start = indices[0], prev = indices[0];
+  for (let i = 1; i < indices.length; i++) {
+    const cur = indices[i];
+    if (cur === prev + 1) {
+      prev = cur;
+    } else {
+      segments.push([start, prev]);
+      start = cur;
+      prev = cur;
+    }
+  }
+  segments.push([start, prev]);
 
-  // Cache hasil periode jika ukurannya masih muat.
+  let rows = [];
+  segments.forEach(seg => {
+    const count = seg[1] - seg[0] + 1;
+    const part = sh.getRange(seg[0], 1, count, cfg.lastCol).getDisplayValues();
+    rows = rows.concat(part);
+  });
+
   try {
     const txt = JSON.stringify(rows);
     if (txt.length < 95000) cache.put(cacheKey, txt, CONFIG.DATA_CACHE_SECONDS);
@@ -321,12 +320,11 @@ function getCommodity_(p) {
   const year=String(p.year||"");
   const month=String(p.month||"");
   const flag=String(p.flag||"");
-  const city=String(p.city||"");
   const mode=String(p.mode||"top10");
 
-  if(!year||!month||flag===""||!city) throw new Error("Tahun, bulan, flag, dan kode kota harus dipilih.");
+  if(!year||!month||flag==="") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
-  const key=["commodity",source,period,year,month,flag,city,mode].join(":");
+  const key=["commodityAll",source,period,year,month,flag,mode].join(":");
   const cache=CacheService.getScriptCache();
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);
@@ -336,29 +334,50 @@ function getCommodity_(p) {
   const metricCol=metricColumn_(c,period,"andil");
   const rows=getPeriodRows_(source,year,month);
 
-  const list=[];
+  const cityMap={};
+
   rows.forEach(r=>{
     if(clean_(r[c.flag-1])!==flag) return;
-    if(clean_(r[c.cityCode-1])!==city) return;
 
+    const cityCode=clean_(r[c.cityCode-1]);
+    const cityName=clean_(r[c.cityName-1]);
     const code=clean_(r[c.commodityCode-1]);
     const name=clean_(r[c.commodityName-1]);
     const value=toNumber_(r[metricCol-1]);
-    if(!code||!name||value===null) return;
-    list.push({code:code,name:name,value:value});
+
+    if(!cityCode||!code||!name||value===null) return;
+
+    if(!cityMap[cityCode]) cityMap[cityCode]={code:cityCode,name:cityName,items:[]};
+    cityMap[cityCode].items.push({code:code,name:name,value:value});
   });
 
-  const lows=list.filter(x=>x.value<0).sort((a,b)=>a.value-b.value);
-  const highs=list.filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
+  // Urutan prioritas sesuai permintaan.
+  const preferred=["1902","1903","1906","1971","1900"];
+  const allCodes=Object.keys(cityMap);
+  const ordered=preferred.filter(x=>cityMap[x]);
 
-  const lowFinal=mode==="threshold"?lows.filter(x=>x.value<=-0.01):lows.slice(0,10);
-  const highFinal=mode==="threshold"?highs.filter(x=>x.value>=0.01):highs.slice(0,10);
+  allCodes
+    .filter(x=>preferred.indexOf(x)===-1)
+    .sort(numericSort_)
+    .forEach(x=>ordered.push(x));
 
-  const result={
-    lowest:lowFinal.map((x,i)=>[i+1,x.code,x.name,x.value]),
-    highest:highFinal.map((x,i)=>[i+1,x.code,x.name,x.value])
-  };
+  const cities=ordered.map(cityCode=>{
+    const city=cityMap[cityCode];
+    const lows=city.items.filter(x=>x.value<0).sort((a,b)=>a.value-b.value);
+    const highs=city.items.filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
 
+    const lowFinal=mode==="threshold"?lows.filter(x=>x.value<=-0.01):lows.slice(0,10);
+    const highFinal=mode==="threshold"?highs.filter(x=>x.value>=0.01):highs.slice(0,10);
+
+    return {
+      code:city.code,
+      name:city.name,
+      lowest:lowFinal.map((x,i)=>[i+1,x.code,x.name,x.value]),
+      highest:highFinal.map((x,i)=>[i+1,x.code,x.name,x.value])
+    };
+  });
+
+  const result={cities:cities};
   cacheSmall_(key,result);
   return result;
 }

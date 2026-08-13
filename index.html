@@ -165,11 +165,7 @@
           <label>Flag</label>
           <select id="filterFlag"></select>
         </div>
-        <div class="filter-item" id="cityFilterWrap" style="display:none">
-          <label>Kode Kota</label>
-          <select id="filterCity"></select>
-        </div>
-        <div class="filter-item komoditas-only" style="display:none">
+<div class="filter-item komoditas-only" style="display:none">
           <label>Tampilan</label>
           <select id="commodityMode">
             <option value="top10">Top 10</option>
@@ -204,31 +200,21 @@
       </section>
 
       <section id="commoditySection" class="hidden">
-        <div class="commodity-grid">
-          <div class="data-card">
-            <div class="card-head danger-head">
-              <div>
-                <span class="eyebrow">KONTRIBUSI NEGATIF</span>
-                <h2>Andil Terendah</h2>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table id="lowestTable" class="display nowrap" style="width:100%"></table>
-            </div>
+        <div class="commodity-toolbar data-card">
+          <div>
+            <span class="eyebrow">KOMODITAS ANDIL</span>
+            <h2 id="commodityPageTitle">Seluruh Kabupaten/Kota</h2>
+            <p id="commodityPageInfo">Tabel ditampilkan per kabupaten/kota.</p>
           </div>
-
-          <div class="data-card">
-            <div class="card-head success-head">
-              <div>
-                <span class="eyebrow">KONTRIBUSI POSITIF</span>
-                <h2>Andil Tertinggi</h2>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table id="highestTable" class="display nowrap" style="width:100%"></table>
-            </div>
+          <div class="commodity-downloads">
+            <button id="downloadCommodityExcel" class="btn">Excel</button>
+            <button id="downloadCommodityCsv" class="btn">CSV</button>
+            <button id="downloadCommodityPdf" class="btn">PDF 1 Page</button>
+            <button id="downloadCommodityImage" class="btn btn-primary">Image 1 Page</button>
           </div>
         </div>
+
+        <div id="commodityAllCities" class="commodity-all-cities"></div>
       </section>
     </main>
   </div>
@@ -254,6 +240,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

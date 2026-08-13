@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbyMl-9Sjxz9AZSatXWTl_dEC4uXQYfqq4LtNgND2TZOVqXssxgTum6X2iPHS50F-elb/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbzmHCrQOwwqhtiaRXZpCiPOAjfgerLblMwCEl-8OMYS_KCKrw3Oxt8GgCWdxiyf5PYJ/exec"
 };
 
 const state = {
@@ -9,8 +9,6 @@ const state = {
   view: "inflasi",
   filters: null,
   mainDt: null,
-  lowDt: null,
-  highDt: null
 };
 
 const Api = {
@@ -129,6 +127,10 @@ function bindAppEvents(){
     document.getElementById("updatedAtModal").classList.add("hidden");
   });
   document.getElementById("saveUpdatedAtBtn").addEventListener("click", saveUpdatedAt);
+  document.getElementById("downloadCommodityImage").addEventListener("click", downloadCommodityPageImage);
+  document.getElementById("downloadCommodityPdf").addEventListener("click", downloadCommodityPagePdf);
+  document.getElementById("downloadCommodityExcel").addEventListener("click", downloadCommodityWorkbook);
+  document.getElementById("downloadCommodityCsv").addEventListener("click", downloadCommodityCsv);
 }
 
 async function loadSourceFilters(){
@@ -139,10 +141,6 @@ async function loadSourceFilters(){
     updateMonths();
     fillSelect("filterFlag", state.filters.flags);
 
-    const cities = (state.filters.cities || []).map(c => ({
-      value:c.code, label:`${c.code} - ${c.name}`
-    }));
-    fillSelect("filterCity", cities);
   }catch(err){ showError(err.message); }
   finally{ showLoading(false); }
 }
@@ -185,7 +183,6 @@ async function loadCurrentView(){
     }else if(state.view === "komoditas"){
       r = await Api.request({
         action:"commodity", ...args,
-        city:valueOf("filterCity"),
         mode:valueOf("commodityMode")
       });
       renderCommodity(r);
@@ -204,7 +201,6 @@ function updateUI(){
   document.getElementById("updateCard").classList.toggle("hidden", state.source !== "asem");
 
   const commodity = state.view === "komoditas";
-  document.getElementById("cityFilterWrap").style.display = commodity ? "" : "none";
   document.querySelectorAll(".komoditas-only").forEach(x => x.style.display = commodity ? "" : "none");
 
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
@@ -249,25 +245,64 @@ function renderStandard(r){
 function renderCommodity(r){
   document.getElementById("standardTableSection").classList.add("hidden");
   document.getElementById("commoditySection").classList.remove("hidden");
-  renderCommodityTable("lowestTable",r.lowest,"lowDt");
-  renderCommodityTable("highestTable",r.highest,"highDt");
-}
-function renderCommodityTable(id,rows,key){
-  if(state[key]){state[key].destroy();state[key]=null;}
-  const table=document.getElementById(id);
-  table.innerHTML="<thead><tr><th>No</th><th>Kode Komoditas</th><th>Nama Komoditas</th><th>Andil Inflasi</th></tr></thead><tbody></tbody>";
-  state[key]=$("#"+id).DataTable({
-    data:rows,paging:false,order:[],
-    columns:[{data:0},{data:1},{data:2},{data:3,render:renderCell}],
-    dom:"Bfrtip",
-    buttons:[
-      {extend:"excelHtml5",title:exportTitle()},
-      {extend:"csvHtml5",title:exportTitle()},
-      {extend:"pdfHtml5",title:exportTitle()},
-      {text:"Image",action:()=>exportImage(id)}
-    ],
-    language:{search:"Cari:",zeroRecords:"Data tidak ditemukan",info:""}
+
+  document.getElementById("commodityPageTitle").textContent = viewTitle();
+  document.getElementById("commodityPageInfo").textContent =
+    `${state.source === "asem" ? "Angka Sementara" : "Angka Final Inflasi"} • Tahun ${valueOf("filterYear")} • Bulan ${valueOf("filterMonth")} • Flag ${valueOf("filterFlag")}`;
+
+  const wrap = document.getElementById("commodityAllCities");
+  wrap.innerHTML = "";
+
+  (r.cities || []).forEach(city => {
+    const sec = document.createElement("section");
+    sec.className = "city-section";
+
+    sec.innerHTML = `
+      <div class="city-section-head">
+        <div>
+          <span class="eyebrow">KABUPATEN/KOTA</span>
+          <h3>${escapeHtml(city.name || "")}</h3>
+        </div>
+        <span class="city-code-badge">${escapeHtml(city.code)}</span>
+      </div>
+      <div class="city-tables">
+        <div class="city-table-card low">
+          <h4>Andil Terendah</h4>
+          <div class="city-table-scroll">${commodityHtmlTable(city.lowest)}</div>
+        </div>
+        <div class="city-table-card high">
+          <h4>Andil Tertinggi</h4>
+          <div class="city-table-scroll">${commodityHtmlTable(city.highest)}</div>
+        </div>
+      </div>
+    `;
+    wrap.appendChild(sec);
   });
+}
+function commodityHtmlTable(rows){
+  let html = `<table class="commodity-plain-table"><thead><tr>
+    <th>No</th><th>Kode Komoditas</th><th>Nama Komoditas</th><th>Andil</th>
+  </tr></thead><tbody>`;
+  if(!rows || !rows.length){
+    html += `<tr><td colspan="4">Tidak ada data</td></tr>`;
+  }else{
+    rows.forEach(r=>{
+      const cls = r[3] > 0 ? "positive" : r[3] < 0 ? "negative" : "";
+      html += `<tr>
+        <td>${r[0]}</td>
+        <td>${escapeHtml(r[1])}</td>
+        <td>${escapeHtml(r[2])}</td>
+        <td class="${cls}">${Number(r[3]).toLocaleString("id-ID",{maximumFractionDigits:4})}</td>
+      </tr>`;
+    });
+  }
+  html += `</tbody></table>`;
+  return html;
+}
+function escapeHtml(v){
+  return String(v ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
 }
 function renderCell(data,type){
   if(type!=="display") return data;
@@ -306,4 +341,73 @@ async function saveUpdatedAt(){
     document.getElementById("dataUpdatedAt").textContent=r.display;
     document.getElementById("updatedAtModal").classList.add("hidden");
   }catch(err){alert(err.message);}
+}
+async function downloadCommodityPageImage(){
+  const el = document.getElementById("commoditySection");
+  const canvas = await html2canvas(el,{backgroundColor:"#f4f7fb",scale:1.5,useCORS:true});
+  const a=document.createElement("a");
+  a.download=exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.png";
+  a.href=canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadCommodityPagePdf(){
+  const el = document.getElementById("commoditySection");
+  const canvas = await html2canvas(el,{backgroundColor:"#fff",scale:1.4,useCORS:true});
+  const img = canvas.toDataURL("image/png");
+  const pageWidth = 841.89;
+  const margin = 18;
+  const usable = pageWidth - margin*2;
+  const ratio = canvas.height / canvas.width;
+  const imgHeight = usable * ratio;
+
+  const doc = {
+    pageSize:"A4",
+    pageOrientation:"landscape",
+    pageMargins:[margin,margin,margin,margin],
+    content:[{image:img,width:usable}],
+    defaultStyle:{fontSize:8}
+  };
+  pdfMake.createPdf(doc).download(
+    exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.pdf"
+  );
+}
+
+function getCommodityRowsFromDom(){
+  const rows=[];
+  document.querySelectorAll(".city-section").forEach(sec=>{
+    const code=sec.querySelector(".city-code-badge")?.textContent.trim()||"";
+    const name=sec.querySelector("h3")?.textContent.trim()||"";
+    sec.querySelectorAll(".city-table-card").forEach(card=>{
+      const type=card.classList.contains("low")?"Terendah":"Tertinggi";
+      card.querySelectorAll("tbody tr").forEach(tr=>{
+        const td=[...tr.querySelectorAll("td")].map(x=>x.textContent.trim());
+        if(td.length===4 && td[0] && td[0]!=="Tidak ada data"){
+          rows.push([code,name,type,td[0],td[1],td[2],td[3]]);
+        }
+      });
+    });
+  });
+  return rows;
+}
+
+function downloadCommodityCsv(){
+  const rows=getCommodityRowsFromDom();
+  const all=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const csv=all.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadCommodityWorkbook(){
+  const rows=getCommodityRowsFromDom();
+  const data=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Komoditas Andil");
+  XLSX.writeFile(wb,exportTitle().replace(/[\\/:*?"<>|]+/g,"-")+"-semua-kabkot.xlsx");
 }
