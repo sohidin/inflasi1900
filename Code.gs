@@ -12,7 +12,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v7"
+  CACHE_VERSION: "v8"
 };
 
 function doGet(e) {

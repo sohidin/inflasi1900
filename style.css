@@ -295,3 +295,28 @@ table.dataTable tbody td:not(:first-child){
 .export-time-box span{display:block;font-size:9px;color:#8fcce8;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
 .export-time-box strong{display:block;font-size:11px;margin:2px 0}
 @media(max-width:900px){.commodity-search-wrap{max-width:none}}
+
+/* ===== V8 export anti-crop ===== */
+#commodityExportClone{
+  overflow:visible!important;
+}
+#commodityExportClone .commodity-all-cities,
+#commodityExportClone .city-section,
+#commodityExportClone .city-tables,
+#commodityExportClone .city-table-card,
+#commodityExportClone .city-table-scroll{
+  overflow:visible!important;
+  max-height:none!important;
+  height:auto!important;
+}
+#commodityExportClone .city-section{
+  break-inside:avoid!important;
+  page-break-inside:avoid!important;
+}
+#commodityExportClone .commodity-plain-table{
+  table-layout:auto;
+}
+#commodityExportClone .commodity-plain-table td,
+#commodityExportClone .commodity-plain-table th{
+  white-space:normal;
+}

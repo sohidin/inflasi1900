@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbwiE8hcejiN52plCj8hHNjOb3j0tmxD_5-17YWf7rZkmiGVgvVY5RRNUIeJtpSfPQcX/exec"
+  API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
 };
 
 const state = {
@@ -434,13 +434,187 @@ function buildCommodityExportClone(){
   return {clone,meta};
 }
 
-async function renderCommodityExportCanvas(){
-  const {clone,meta}=buildCommodityExportClone();
+
+async function renderCommodityExportImageCanvas(){
+  const {clone, meta} = buildCommodityExportClone();
   try{
-    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    const canvas=await html2canvas(clone,{backgroundColor:"#f4f7fb",scale:1.35,useCORS:true,logging:false,width:clone.scrollWidth,height:clone.scrollHeight,windowWidth:1500,scrollX:0,scrollY:0});
-    return {canvas,meta};
-  }finally{clone.remove();}
+    // Buat semua section terlihat dan ukur tinggi aktual setelah layout selesai.
+    clone.style.position = "fixed";
+    clone.style.left = "-20000px";
+    clone.style.top = "0";
+    clone.style.width = "1400px";
+    clone.style.maxWidth = "1400px";
+    clone.style.height = "auto";
+    clone.style.overflow = "visible";
+
+    clone.querySelectorAll(".city-section").forEach(sec=>{
+      if(sec.style.display !== "none"){
+        sec.style.breakInside = "avoid";
+        sec.style.pageBreakInside = "avoid";
+      }
+    });
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const width = Math.ceil(clone.scrollWidth);
+    const height = Math.ceil(clone.scrollHeight);
+
+    const canvas = await html2canvas(clone,{
+      backgroundColor:"#f4f7fb",
+      scale:1.15,
+      useCORS:true,
+      logging:false,
+      width:width,
+      height:height,
+      windowWidth:width + 100,
+      windowHeight:height + 100,
+      scrollX:0,
+      scrollY:0
+    });
+
+    return {canvas, meta};
+  } finally {
+    clone.remove();
+  }
+}
+
+async function downloadCommodityPageImage(){
+  const {canvas, meta} = await renderCommodityExportImageCanvas();
+
+  // PNG dipakai agar tabel/tulisan tetap tajam. Seluruh konten ada dalam satu gambar panjang.
+  const a = document.createElement("a");
+  a.download = safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadCommodityPagePdf(){
+  const {clone, meta} = buildCommodityExportClone();
+
+  try{
+    clone.style.position = "fixed";
+    clone.style.left = "-20000px";
+    clone.style.top = "0";
+    clone.style.width = "1400px";
+    clone.style.maxWidth = "1400px";
+    clone.style.height = "auto";
+    clone.style.overflow = "visible";
+
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    // Render header sekali.
+    const header = clone.querySelector(".export-report-header");
+    const headerCanvas = await html2canvas(header,{
+      backgroundColor:"#f4f7fb",
+      scale:1.25,
+      useCORS:true,
+      logging:false
+    });
+
+    const headerImg = headerCanvas.toDataURL("image/png");
+
+    // Render SETIAP card kab/kota secara terpisah.
+    // Dengan begitu sebuah card tidak akan pernah terpotong di batas halaman PDF.
+    const sections = [...clone.querySelectorAll(".city-section")]
+      .filter(sec => sec.style.display !== "none");
+
+    const rendered = [];
+    for(const sec of sections){
+      const c = await html2canvas(sec,{
+        backgroundColor:"#ffffff",
+        scale:1.25,
+        useCORS:true,
+        logging:false,
+        width:Math.ceil(sec.scrollWidth),
+        height:Math.ceil(sec.scrollHeight)
+      });
+      rendered.push({
+        image:c.toDataURL("image/png"),
+        width:c.width,
+        height:c.height
+      });
+    }
+
+    const pageW = 841.89;   // A4 landscape pt
+    const pageH = 595.28;
+    const margin = 18;
+    const usableW = pageW - margin*2;
+    const usableH = pageH - margin*2;
+
+    // Header akan diulang setiap halaman.
+    const headerRatio = headerCanvas.height / headerCanvas.width;
+    const headerHeightPt = usableW * headerRatio;
+    const gap = 10;
+    const cardAreaH = usableH - headerHeightPt - gap;
+
+    const content = [];
+    let firstPage = true
+
+
+    let firstPage = true;
+
+    for(const item of rendered){
+      // Ukuran card diperkecil proporsional bila lebih tinggi dari area halaman.
+      // Tidak di-crop: seluruh card tetap terlihat.
+      let cardW = usableW;
+      let cardH = cardW * (item.height / item.width);
+
+      if(cardH > cardAreaH){
+        const scale = cardAreaH / cardH;
+        cardH *= scale;
+        cardW *= scale;
+      }
+
+      if(!firstPage){
+        content.push({text:"",pageBreak:"before"});
+      }
+
+      content.push({
+        image:headerImg,
+        width:usableW,
+        margin:[0,0,0,gap]
+      });
+
+      content.push({
+        image:item.image,
+        width:cardW,
+        alignment:"center",
+        margin:[0,0,0,0]
+      });
+
+      firstPage = false;
+    }
+
+    // Fallback kalau hasil search membuat semua kota tersembunyi.
+    if(!rendered.length){
+      content.push({
+        image:headerImg,
+        width:usableW,
+        margin:[0,0,0,12]
+      });
+      content.push({
+        text:"Tidak ada data yang sesuai dengan pencarian.",
+        alignment:"center",
+        color:"#718096",
+        margin:[0,30,0,0]
+      });
+    }
+
+    pdfMake.createPdf({
+      pageSize:"A4",
+      pageOrientation:"landscape",
+      pageMargins:[margin,margin,margin,margin],
+      content,
+      info:{
+        title:`${meta.source} - ${viewTitle()}`,
+        subject:`Download ${meta.dateText} ${meta.timeText}`
+      }
+    }).download(
+      safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".pdf"
+    );
+  } finally {
+    clone.remove();
+  }
 }
 
 function commodityFlatRows(){

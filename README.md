@@ -89,3 +89,13 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 - PDF otomatis dibagi menjadi beberapa halaman bila tinggi, namun visual web tetap dipertahankan.
 - Semua download memuat jenis data (Angka Sementara/Angka Final Inflasi) serta tanggal dan jam download.
 - Nama file Excel/CSV/PDF/Image juga memuat jenis data dan timestamp.
+
+
+## V8
+- Perbaikan export Komoditas Andil agar tidak terpotong.
+- Image dirender sebagai satu canvas panjang berdasarkan tinggi aktual seluruh konten.
+- PDF tidak lagi memotong screenshot panjang secara sembarang.
+- PDF merender setiap card kab/kota sebagai satu unit, lalu menempatkan satu card per halaman A4 landscape.
+- Jika sebuah card terlalu tinggi, card diperkecil proporsional agar seluruhnya tetap terlihat, bukan di-crop.
+- Header jenis data dan waktu download tetap tampil pada setiap halaman PDF.
+- Search global tetap dihormati saat ekspor.
