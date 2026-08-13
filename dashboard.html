@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Inflasi 1900</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark small">BPS</div>
+        <div>
+          <strong>Inflasi 1900</strong>
+          <small>Dashboard Monitoring</small>
+        </div>
+      </div>
+
+      <nav id="sidebarNav">
+        <button class="nav-section active" data-source="asem">Angka Sementara</button>
+
+        <div class="nav-group">
+          <div class="nav-group-title">MtM</div>
+          <button data-source="asem" data-period="mtm" data-view="inflasi">Inflasi MtM</button>
+          <button data-source="asem" data-period="mtm" data-view="andil">Andil MtM</button>
+          <button data-source="asem" data-period="mtm" data-view="komoditas">Komoditas Andil MtM</button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">YtD</div>
+          <button data-source="asem" data-period="ytd" data-view="inflasi">Inflasi YtD</button>
+          <button data-source="asem" data-period="ytd" data-view="andil">Andil YtD</button>
+          <button data-source="asem" data-period="ytd" data-view="komoditas">Komoditas Andil YtD</button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">YoY</div>
+          <button data-source="asem" data-period="yoy" data-view="inflasi">Inflasi YoY</button>
+          <button data-source="asem" data-period="yoy" data-view="andil">Andil YoY</button>
+          <button data-source="asem" data-period="yoy" data-view="komoditas">Komoditas Andil YoY</button>
+        </div>
+
+        <button data-source="asem" data-view="headline">Inflasi Asem</button>
+
+        <div class="sidebar-divider"></div>
+        <button class="nav-section" data-source="final">Angka Final Inflasi</button>
+
+        <div class="nav-group">
+          <div class="nav-group-title">MtM</div>
+          <button data-source="final" data-period="mtm" data-view="inflasi">Inflasi MtM</button>
+          <button data-source="final" data-period="mtm" data-view="andil">Andil MtM</button>
+          <button data-source="final" data-period="mtm" data-view="komoditas">Komoditas Andil MtM</button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">YtD</div>
+          <button data-source="final" data-period="ytd" data-view="inflasi">Inflasi YtD</button>
+          <button data-source="final" data-period="ytd" data-view="andil">Andil YtD</button>
+          <button data-source="final" data-period="ytd" data-view="komoditas">Komoditas Andil YtD</button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">YoY</div>
+          <button data-source="final" data-period="yoy" data-view="inflasi">Inflasi YoY</button>
+          <button data-source="final" data-period="yoy" data-view="andil">Andil YoY</button>
+          <button data-source="final" data-period="yoy" data-view="komoditas">Komoditas Andil YoY</button>
+        </div>
+
+        <button data-source="final" data-view="headline">Inflasi Final</button>
+      </nav>
+
+      <button id="logoutBtn" class="btn btn-ghost sidebar-logout">Keluar</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Inflasi MtM</h1>
+          <p id="pageSubtitle" class="muted">Angka Sementara</p>
+        </div>
+
+        <div class="update-card" id="updateCard">
+          <small>Data Angka Sementara per</small>
+          <strong id="dataUpdatedAt">-</strong>
+          <button id="editUpdatedAtBtn" class="btn btn-small">Edit</button>
+        </div>
+      </header>
+
+      <section class="filter-panel">
+        <div class="filter-item">
+          <label>Tahun</label>
+          <select id="filterYear"></select>
+        </div>
+        <div class="filter-item">
+          <label>Bulan</label>
+          <select id="filterMonth"></select>
+        </div>
+        <div class="filter-item">
+          <label>Flag</label>
+          <select id="filterFlag"></select>
+        </div>
+        <div class="filter-item" id="cityFilterWrap" style="display:none">
+          <label>Kode Kota</label>
+          <select id="filterCity"></select>
+        </div>
+        <div class="filter-item komoditas-only" style="display:none">
+          <label>Tampilan</label>
+          <select id="commodityMode">
+            <option value="top10">10 tertinggi & terendah</option>
+            <option value="threshold">Andil ≥ |0,01|</option>
+          </select>
+        </div>
+        <div class="filter-actions">
+          <button id="applyFilterBtn" class="btn btn-primary">Terapkan</button>
+          <button id="resetFilterBtn" class="btn">Reset</button>
+        </div>
+      </section>
+
+      <section id="loadingBox" class="loading-box" style="display:none">Memuat data...</section>
+      <section id="errorBox" class="error-box" style="display:none"></section>
+
+      <section id="standardTableSection" class="card">
+        <div class="card-header">
+          <div>
+            <h2 id="tableTitle">Tabulasi</h2>
+            <p id="tableInfo" class="muted"></p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="mainTable" class="display nowrap" style="width:100%"></table>
+        </div>
+      </section>
+
+      <section id="commoditySection" style="display:none">
+        <div class="split-grid">
+          <div class="card">
+            <div class="card-header">
+              <h2>Andil Terendah</h2>
+            </div>
+            <div class="table-scroll">
+              <table id="lowestTable" class="display nowrap" style="width:100%"></table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Andil Tertinggi</h2>
+            </div>
+            <div class="table-scroll">
+              <table id="highestTable" class="display nowrap" style="width:100%"></table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="updatedAtModal" class="modal" style="display:none">
+    <div class="modal-card">
+      <h3>Edit Data Per</h3>
+      <label>Tanggal dan Jam</label>
+      <input id="updatedAtInput" type="datetime-local">
+      <div class="modal-actions">
+        <button id="cancelUpdatedAtBtn" class="btn">Batal</button>
+        <button id="saveUpdatedAtBtn" class="btn btn-primary">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/export.js"></script>
+</body>
+</html>

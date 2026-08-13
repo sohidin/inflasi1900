@@ -1,709 +1,418 @@
-const APP_CONFIG = {
-  SPREADSHEET_ID: '1vtkkNXmAoejS6R0BNsuE3r6EdOySHc-nnoVNsg0Z-CE',
-  DATA_SHEET_NAME: 'Data', // Ganti jika nama tab data berbeda
-  APP_TITLE: 'Dashboard Andil Inflasi',
-  REGION_CODES: ['1902', '1903', '1906', '1971', '19'],
-  DEFAULT_USERNAME: 'harga1900',
-  DEFAULT_PASSWORD: 'harga1900',
-  SESSION_SECONDS: 21600, // 6 jam
-  AUTO_REFRESH_SECONDS: 60
+const CONFIG = {
+  SPREADSHEET_ID: "1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI",
+  SHEET_ASEM: "asem",
+  SHEET_FINAL: "angka final inflasi",
+
+  // Login
+  USERNAME: "harga1900",
+  PASSWORD: "harga1900",
+
+  // Cache
+  CACHE_SECONDS: 300
 };
 
-/**
- * Web app entry point.
- */
-function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
-    .evaluate()
-    .setTitle(APP_CONFIG.APP_TITLE)
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}
-
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
-}
-
-/**
- * Jalankan sekali dari editor Apps Script untuk membuat konfigurasi awal.
- */
-function setupApplication() {
-  const props = PropertiesService.getScriptProperties();
-  // Login awal ditetapkan ulang setiap kali fungsi setup dijalankan.
-  // Setelah aplikasi aktif, login dapat diubah dari menu Pengaturan.
-  props.setProperty('APP_USERNAME', APP_CONFIG.DEFAULT_USERNAME);
-  props.setProperty('APP_PASSWORD', APP_CONFIG.DEFAULT_PASSWORD);
-
-  if (!props.getProperty('DATA_CONDITION')) {
-    props.setProperty('DATA_CONDITION', '27 Juli 2026 pukul 08.00 WIB');
-    props.setProperty('DATA_CONDITION_VALUE', '2026-07-27T08:00');
-  }
-
-  if (!props.getProperty('DATA_STATUS')) {
-    props.setProperty('DATA_STATUS', 'Angka Sementara');
-  }
-
-  // Memastikan spreadsheet dapat dibuka dan tab data tersedia.
-  const sheet = getDataSheet_();
-  return {
-    success: true,
-    message: 'Konfigurasi awal berhasil.',
-    spreadsheet: sheet.getParent().getName(),
-    sheet: sheet.getName()
-  };
-}
-
-/**
- * Login server-side dan membuat token sesi sementara.
- */
-function login(username, password) {
-  username = String(username || '').trim();
-  password = String(password || '');
-
-  const props = PropertiesService.getScriptProperties();
-  const validUser = props.getProperty('APP_USERNAME') || APP_CONFIG.DEFAULT_USERNAME;
-  const validPassword = props.getProperty('APP_PASSWORD') || APP_CONFIG.DEFAULT_PASSWORD;
-
-  if (username !== validUser || password !== validPassword) {
-    return { success: false, message: 'Username atau password salah.' };
-  }
-
-  const token = Utilities.getUuid();
-  const session = {
-    username: username,
-    loginAt: new Date().toISOString()
-  };
-  CacheService.getScriptCache().put(
-    'SESSION_' + token,
-    JSON.stringify(session),
-    APP_CONFIG.SESSION_SECONDS
-  );
-
-  return {
-    success: true,
-    token: token,
-    appTitle: APP_CONFIG.APP_TITLE,
-    condition: getDataCondition_()
-  };
-}
-
-function validateSession(token) {
-  const session = getSession_(token);
-  return session
-    ? { success: true, session: session, condition: getDataCondition_() }
-    : { success: false, message: 'Sesi telah berakhir. Silakan login kembali.' };
-}
-
-function logout(token) {
-  if (token) CacheService.getScriptCache().remove('SESSION_' + token);
-  return { success: true };
-}
-
-/**
- * Mengambil seluruh data awal yang dibutuhkan dashboard.
- */
-function getDashboardData(token) {
-  requireSession_(token);
-  const records = getRecords_();
-  const flag3 = records.filter(r => normalizeFlag_(r.flag) === '3');
-  const flag0 = records.filter(r => normalizeFlag_(r.flag) === '0');
-
-  const regions = buildRegionMap_(records);
-  const commoditySet = {};
-  flag3.forEach(r => {
-    if (r.commodityCode || r.commodityName) {
-      commoditySet[String(r.commodityCode) + '|' + String(r.commodityName)] = true;
-    }
-  });
-
-  return {
-    condition: getDataCondition_(),
-    lastUpdated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd MMMM yyyy HH:mm'),
-    statistics: {
-      totalRows: records.length,
-      flag3Rows: flag3.length,
-      flag0Rows: flag0.length,
-      commodities: Object.keys(commoditySet).length,
-      regions: APP_CONFIG.REGION_CODES.length
-    },
-    regions: APP_CONFIG.REGION_CODES.map(code => ({
-      code: code,
-      name: regions[code] || code
-    }))
-  };
-}
-
-function getPivotData(token, metric) {
-  requireSession_(token);
-  const metricConfig = getMetricConfig_(metric);
-  const records = getRecords_().filter(r => normalizeFlag_(r.flag) === '3');
-  const regions = buildRegionMap_(records);
-  const map = {};
-
-  records.forEach(r => {
-    const regionCode = normalizeCode_(r.regionCode);
-    if (APP_CONFIG.REGION_CODES.indexOf(regionCode) === -1) return;
-
-    const commodityCode = cleanText_(r.commodityCode);
-    const commodityName = cleanText_(r.commodityName);
-    if (!commodityCode && !commodityName) return;
-
-    const key = commodityCode + '|' + commodityName;
-    if (!map[key]) {
-      map[key] = {
-        commodityCode: commodityCode,
-        commodityName: commodityName,
-        values: {}
-      };
-    }
-    map[key].values[regionCode] = toNumberOrNull_(r[metricConfig.field]);
-  });
-
-  const rows = Object.keys(map)
-    .map(key => map[key])
-    .sort((a, b) => {
-      const byCode = naturalCompare_(a.commodityCode, b.commodityCode);
-      return byCode !== 0 ? byCode : naturalCompare_(a.commodityName, b.commodityName);
-    });
-
-  return {
-    metric: metricConfig.label,
-    condition: getDataCondition_(),
-    title: 'Andil ' + metricConfig.label + ' Kabupaten/Kota',
-    regions: APP_CONFIG.REGION_CODES.map(code => ({
-      code: code,
-      name: regions[code] || code
-    })),
-    rows: rows
-  };
-}
-
-
-/**
- * Tabel Inflasi per komoditas dan wilayah.
- * Sumber kolom:
- * C kode wilayah, E kode komoditas, F nama komoditas,
- * I Inflasi MtM, J Inflasi YtD, K Inflasi YoY, dan kolom G/Flag sebagai filter.
- */
-function getInflationPivotData(token, metric, selectedFlag) {
-  requireSession_(token);
-
-  const metricConfig = getInflationMetricConfig_(metric);
-  const allRecords = getRecords_();
-  const availableFlags = getAvailableFlags_(allRecords);
-
-  selectedFlag = String(
-    selectedFlag === undefined || selectedFlag === null
-      ? ''
-      : selectedFlag
-  ).trim();
-
-  // Default menampilkan seluruh Flag.
-  if (!selectedFlag) {
-    selectedFlag = '__ALL__';
-  }
-
-  const showAllFlags = selectedFlag === '__ALL__';
-
-  const records = showAllFlags
-    ? allRecords
-    : allRecords.filter(
-        r => normalizeFlag_(r.flag) === normalizeFlag_(selectedFlag)
-      );
-
-  const regions = buildRegionMap_(allRecords);
-  const map = {};
-
-  records.forEach(r => {
-    const regionCode = normalizeCode_(r.regionCode);
-    if (APP_CONFIG.REGION_CODES.indexOf(regionCode) === -1) return;
-
-    const commodityCode = cleanText_(r.commodityCode);
-    const commodityName = cleanText_(r.commodityName);
-    if (!commodityCode && !commodityName) return;
-
-    const key = commodityCode + '|' + commodityName;
-
-    if (!map[key]) {
-      map[key] = {
-        commodityCode: commodityCode,
-        commodityName: commodityName,
-        values: {}
-      };
-    }
-
-    const value = toNumberOrNull_(r[metricConfig.field]);
-
-    // Nilai nonkosong terakhir dipakai bila terdapat duplikasi.
-    if (value !== null) {
-      map[key].values[regionCode] = value;
-    } else if (!(regionCode in map[key].values)) {
-      map[key].values[regionCode] = null;
-    }
-  });
-
-  const rows = Object.keys(map)
-    .map(key => map[key])
-    .sort((a, b) => {
-      const byCode = naturalCompare_(a.commodityCode, b.commodityCode);
-      return byCode !== 0
-        ? byCode
-        : naturalCompare_(a.commodityName, b.commodityName);
-    });
-
-  return {
-    metric: metricConfig.label,
-    metricKey: String(metric || '').toLowerCase(),
-    condition: getDataCondition_(),
-    title: 'Inflasi ' + metricConfig.label + ' Kabupaten/Kota',
-    selectedFlag: selectedFlag,
-    selectedFlagLabel: selectedFlag === '__ALL__'
-      ? 'Semua Flag'
-      : 'Flag ' + selectedFlag,
-    availableFlags: availableFlags,
-    regions: APP_CONFIG.REGION_CODES.map(code => ({
-      code: code,
-      name: regions[code] || code
-    })),
-    rows: rows
-  };
-}
-
-function getTopBottomData(token, metric) {
-  requireSession_(token);
-  const metricConfig = getMetricConfig_(metric);
-  const records = getRecords_().filter(r => normalizeFlag_(r.flag) === '3');
-  const regions = buildRegionMap_(records);
-
-  const result = APP_CONFIG.REGION_CODES.map(code => {
-    const items = records
-      .filter(r => normalizeCode_(r.regionCode) === code)
-      .map(r => ({
-        commodityCode: cleanText_(r.commodityCode),
-        commodityName: cleanText_(r.commodityName),
-        value: toNumberOrNull_(r[metricConfig.field])
-      }))
-      .filter(r => r.commodityName && r.value !== null);
-
-    // Menggabungkan komoditas duplikat pada wilayah yang sama.
-    const unique = {};
-    items.forEach(item => {
-      const key = item.commodityCode + '|' + item.commodityName;
-      unique[key] = item;
-    });
-    const uniqueItems = Object.keys(unique).map(key => unique[key]);
-
-    const highest = uniqueItems.slice().sort((a, b) => b.value - a.value).slice(0, 10);
-    const lowest = uniqueItems.slice().sort((a, b) => a.value - b.value).slice(0, 10);
-
-    return {
-      code: code,
-      name: regions[code] || code,
-      highest: highest,
-      lowest: lowest
-    };
-  });
-
-  return {
-    metric: metricConfig.label,
-    condition: getDataCondition_(),
-    regions: result
-  };
-}
-
-function getRecapData(token) {
-  requireSession_(token);
-  const records = getRecords_().filter(r => normalizeFlag_(r.flag) === '0');
-  const regionMap = buildRegionMap_(getRecords_());
-
-  const byRegion = {};
-  records.forEach(r => {
-    const code = normalizeCode_(r.regionCode);
-    if (APP_CONFIG.REGION_CODES.indexOf(code) === -1) return;
-
-    if (!byRegion[code]) {
-      byRegion[code] = {
-        code: code,
-        name: cleanText_(r.regionName) || regionMap[code] || code,
-        mtm: null,
-        ytd: null,
-        yoy: null
-      };
-    }
-
-    // Nilai nonkosong terakhir dipakai jika ada lebih dari satu baris flag 0.
-    const mtm = toNumberOrNull_(r.inflationMtm);
-    const ytd = toNumberOrNull_(r.inflationYtd);
-    const yoy = toNumberOrNull_(r.inflationYoy);
-    if (mtm !== null) byRegion[code].mtm = mtm;
-    if (ytd !== null) byRegion[code].ytd = ytd;
-    if (yoy !== null) byRegion[code].yoy = yoy;
-  });
-
-  const rows = APP_CONFIG.REGION_CODES.map(code => byRegion[code] || {
-    code: code,
-    name: regionMap[code] || code,
-    mtm: null,
-    ytd: null,
-    yoy: null
-  });
-
-  return {
-    condition: getDataCondition_(),
-    rows: rows,
-    extrema: {
-      mtm: getExtrema_(rows, 'mtm'),
-      ytd: getExtrema_(rows, 'ytd'),
-      yoy: getExtrema_(rows, 'yoy')
-    }
-  };
-}
-
-/**
- * Mengembalikan URL tab raw data yang dipakai aplikasi.
- * URL dibuat di server agar ID spreadsheet tetap terpusat di Code.gs.
- */
-function getRawDataUrl(token) {
-  requireSession_(token);
-
-  const spreadsheet = getSpreadsheet_();
-  const sheet = getDataSheet_();
-
-  return {
-    success: true,
-    spreadsheetName: spreadsheet.getName(),
-    sheetName: sheet.getName(),
-    url: spreadsheet.getUrl() + '#gid=' + sheet.getSheetId()
-  };
-}
-
-function getSettings(token) {
-  requireSession_(token);
-  return {
-    condition: getDataCondition_(),
-    conditionValue: getDataConditionValue_(),
-    dataStatus: getDataStatus_(),
-    dataConditionText: getDataConditionText_(),
-    dataSheetName: getDataSheet_().getName(),
-    spreadsheetName: getSpreadsheet_().getName(),
-    autoRefreshSeconds: APP_CONFIG.AUTO_REFRESH_SECONDS
-  };
-}
-
-function saveDataCondition(token, dateTimeValue, dataStatus) {
-  requireSession_(token);
-
-  dateTimeValue = String(dateTimeValue || '').trim();
-  dataStatus = normalizeDataStatus_(dataStatus);
-
-  if (!dateTimeValue) {
-    throw new Error('Tanggal dan jam kondisi data harus dipilih.');
-  }
-
-  const parsedDate = parseDateTimeLocal_(dateTimeValue);
-  if (!parsedDate || isNaN(parsedDate.getTime())) {
-    throw new Error('Format tanggal dan jam tidak valid.');
-  }
-
-  const formattedCondition = formatDataCondition_(parsedDate);
-  const props = PropertiesService.getScriptProperties();
-
-  props.setProperty('DATA_CONDITION', formattedCondition);
-  props.setProperty('DATA_CONDITION_VALUE', dateTimeValue);
-  props.setProperty('DATA_STATUS', dataStatus);
-
-  return {
-    success: true,
-    condition: getDataCondition_(),
-    conditionValue: dateTimeValue,
-    dataStatus: dataStatus,
-    dataConditionText: formattedCondition
-  };
-}
-
-function changeLogin(token, username, password) {
-  requireSession_(token);
-  username = String(username || '').trim();
-  password = String(password || '');
-  if (username.length < 4) throw new Error('Username minimal 4 karakter.');
-  if (password.length < 4) throw new Error('Password minimal 4 karakter.');
-
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('APP_USERNAME', username);
-  props.setProperty('APP_PASSWORD', password);
-  return { success: true, message: 'Login berhasil diperbarui.' };
-}
-
-/** -------------------- Helper internal -------------------- */
-
-function getSpreadsheet_() {
-  return SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
-}
-
-function getDataSheet_() {
-  const ss = getSpreadsheet_();
-  const requested = ss.getSheetByName(APP_CONFIG.DATA_SHEET_NAME);
-  if (requested) return requested;
-
-  const sheets = ss.getSheets();
-  if (!sheets.length) throw new Error('Spreadsheet tidak memiliki sheet.');
-  return sheets[0];
-}
-
-/**
- * Membaca kolom berdasarkan posisi yang dijelaskan:
- * C kode wilayah, D nama wilayah, E kode komoditas, F nama komoditas,
- * I inflasi MtM, J inflasi YtD, K inflasi YoY,
- * L andil MtM, M andil YtD, N andil YoY.
- * Kolom Flag dicari dari nama header agar tidak bergantung pada posisi.
- */
-function getRecords_() {
-  const sheet = getDataSheet_();
-  const values = sheet.getDataRange().getDisplayValues();
-  if (values.length < 2) return [];
-
-  const headers = values[0].map(h => normalizeHeader_(h));
-  const flagIndex = findHeaderIndex_(headers, ['flag', 'kode flag', 'flagging']);
-  if (flagIndex === -1) {
-    throw new Error('Kolom "Flag" tidak ditemukan pada baris header sheet ' + sheet.getName() + '.');
-  }
-
-  return values.slice(1).map((row, i) => ({
-    sheetRow: i + 2,
-    flag: row[flagIndex],
-    regionCode: row[2],   // C
-    regionName: row[3],   // D
-    commodityCode: row[4],// E
-    commodityName: row[5],// F
-    inflationMtm: row[8], // I
-    inflationYtd: row[9], // J
-    inflationYoy: row[10],// K
-    andilMtm: row[11],    // L
-    andilYtd: row[12],    // M
-    andilYoy: row[13]     // N
-  })).filter(r => {
-    return Object.keys(r).some(k => k !== 'sheetRow' && String(r[k] || '').trim() !== '');
-  });
-}
-
-function getMetricConfig_(metric) {
-  const configs = {
-    mtm: { label: 'MtM', field: 'andilMtm' },
-    ytd: { label: 'YtD', field: 'andilYtd' },
-    yoy: { label: 'YoY', field: 'andilYoy' }
-  };
-  const key = String(metric || '').toLowerCase();
-  if (!configs[key]) throw new Error('Metrik tidak dikenali.');
-  return configs[key];
-}
-
-
-function getInflationMetricConfig_(metric) {
-  const configs = {
-    mtm: { label: 'MtM', field: 'inflationMtm' },
-    ytd: { label: 'YtD', field: 'inflationYtd' },
-    yoy: { label: 'YoY', field: 'inflationYoy' }
-  };
-
-  const key = String(metric || '').toLowerCase();
-  if (!configs[key]) throw new Error('Metrik inflasi tidak dikenali.');
-  return configs[key];
-}
-
-function getAvailableFlags_(records) {
-  const map = {};
-
-  (records || []).forEach(r => {
-    const value = normalizeFlag_(r.flag);
-    if (value !== '') map[value] = true;
-  });
-
-  return Object.keys(map).sort(naturalCompare_);
-}
-
-function buildRegionMap_(records) {
-  const map = {};
-  records.forEach(r => {
-    const code = normalizeCode_(r.regionCode);
-    const name = cleanText_(r.regionName);
-    if (code && name) map[code] = name;
-  });
-  return map;
-}
-
-function getDataCondition_() {
-  return getDataStatus_() + ' — ' + getDataConditionText_();
-}
-
-function getDataConditionText_() {
-  return PropertiesService
-    .getScriptProperties()
-    .getProperty('DATA_CONDITION') || '27 Juli 2026 pukul 08.00 WIB';
-}
-
-function getDataStatus_() {
-  return normalizeDataStatus_(
-    PropertiesService
-      .getScriptProperties()
-      .getProperty('DATA_STATUS') || 'Angka Sementara'
-  );
-}
-
-function normalizeDataStatus_(value) {
-  const status = String(value || '').trim().toLowerCase();
-
-  if (status === 'angka tetap') {
-    return 'Angka Tetap';
-  }
-
-  return 'Angka Sementara';
-}
-
-
-function getDataConditionValue_() {
-  const props = PropertiesService.getScriptProperties();
-  const savedValue = props.getProperty('DATA_CONDITION_VALUE');
-
-  if (savedValue) return savedValue;
-
-  return Utilities.formatDate(
-    new Date(),
-    Session.getScriptTimeZone(),
-    "yyyy-MM-dd'T'HH:mm"
-  );
-}
-
-function parseDateTimeLocal_(value) {
-  const match = String(value || '').match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
-  );
-
-  if (!match) return null;
-
-  return new Date(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-    0,
-    0
-  );
-}
-
-function formatDataCondition_(date) {
-  const monthNames = [
-    'Januari', 'Februari', 'Maret', 'April',
-    'Mei', 'Juni', 'Juli', 'Agustus',
-    'September', 'Oktober', 'November', 'Desember'
-  ];
-
-  const day = date.getDate();
-  const month = monthNames[date.getMonth()];
-  const year = date.getFullYear();
-  const hour = String(date.getHours()).padStart(2, '0');
-  const minute = String(date.getMinutes()).padStart(2, '0');
-
-  return day + ' ' + month + ' ' + year +
-    ' pukul ' + hour + '.' + minute + ' WIB';
-}
-
-function getSession_(token) {
-  if (!token) return null;
-  const raw = CacheService.getScriptCache().get('SESSION_' + token);
-  if (!raw) return null;
+function doGet(e) {
   try {
-    return JSON.parse(raw);
-  } catch (e) {
-    return null;
-  }
-}
+    const p = e && e.parameter ? e.parameter : {};
+    const action = String(p.action || "").trim();
 
-function requireSession_(token) {
-  const session = getSession_(token);
-  if (!session) throw new Error('SESSION_EXPIRED');
-  return session;
-}
-
-function normalizeHeader_(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[_\-]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}
-
-function findHeaderIndex_(headers, candidates) {
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = normalizeHeader_(candidates[i]);
-    const idx = headers.indexOf(candidate);
-    if (idx !== -1) return idx;
-  }
-  return -1;
-}
-
-function normalizeFlag_(value) {
-  return String(value === null || value === undefined ? '' : value).trim().replace(/\.0+$/, '');
-}
-
-function normalizeCode_(value) {
-  return String(value === null || value === undefined ? '' : value).trim().replace(/\.0+$/, '');
-}
-
-function cleanText_(value) {
-  return String(value === null || value === undefined ? '' : value).trim();
-}
-
-function toNumberOrNull_(value) {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  let text = String(value).trim().replace(/\s/g, '').replace(/%/g, '');
-
-  // Mendukung format Indonesia (1.234,56) dan format umum (1234.56).
-  if (text.indexOf(',') !== -1 && text.indexOf('.') !== -1) {
-    if (text.lastIndexOf(',') > text.lastIndexOf('.')) {
-      text = text.replace(/\./g, '').replace(',', '.');
-    } else {
-      text = text.replace(/,/g, '');
+    let result;
+    switch (action) {
+      case "login":
+        result = login_(p.username, p.password);
+        break;
+      case "filters":
+        result = getFilters_(p.source);
+        break;
+      case "table":
+        result = getPivotTable_(p);
+        break;
+      case "headline":
+        result = getHeadline_(p);
+        break;
+      case "commodity":
+        result = getCommodity_(p);
+        break;
+      case "getUpdatedAt":
+        result = getUpdatedAt_();
+        break;
+      case "setUpdatedAt":
+        result = setUpdatedAt_(p.value, p.token);
+        break;
+      case "ping":
+        result = { message: "API aktif" };
+        break;
+      default:
+        throw new Error("Action tidak dikenali.");
     }
-  } else if (text.indexOf(',') !== -1) {
-    text = text.replace(',', '.');
+
+    return json_({ ok: true, ...result });
+  } catch (err) {
+    return json_({ ok: false, message: err.message || String(err) });
+  }
+}
+
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function login_(username, password) {
+  if (String(username) !== CONFIG.USERNAME || String(password) !== CONFIG.PASSWORD) {
+    throw new Error("Username atau password salah.");
   }
 
-  const num = Number(text);
-  return isFinite(num) ? num : null;
+  const token = Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      CONFIG.USERNAME + "|" + CONFIG.PASSWORD + "|" + new Date().toISOString().slice(0,10)
+    )
+  );
+
+  return { token: token };
 }
 
-function getExtrema_(rows, field) {
-  const values = rows.map(r => r[field]).filter(v => v !== null && isFinite(v));
-  if (!values.length) return { max: null, min: null };
-  return { max: Math.max.apply(null, values), min: Math.min.apply(null, values) };
+function validateToken_(token) {
+  const expected = login_(CONFIG.USERNAME, CONFIG.PASSWORD).token;
+  if (!token || token !== expected) throw new Error("Sesi login tidak valid.");
 }
 
-function naturalCompare_(a, b) {
-  return String(a || '').localeCompare(String(b || ''), 'id', {
-    numeric: true,
-    sensitivity: 'base'
+function sourceConfig_(source) {
+  source = String(source || "").toLowerCase();
+  if (source === "asem") {
+    return {
+      sheetName: CONFIG.SHEET_ASEM,
+      cols: {
+        year: 1, month: 2, cityCode: 3, cityName: 4,
+        commodityCode: 5, commodityName: 6, flag: 7,
+        ihk: 8,
+        inflasiMtm: 9, inflasiYtd: 10, inflasiYoy: 11,
+        andilMtm: 12, andilYtd: 13, andilYoy: 14
+      }
+    };
+  }
+
+  if (source === "final") {
+    return {
+      sheetName: CONFIG.SHEET_FINAL,
+      cols: {
+        year: 1, month: 2, cityCode: 3, cityName: 4,
+        commodityCode: 5, commodityName: 6, flag: 7,
+        nk: 8, ihk: 9,
+        inflasiMtm: 10, inflasiYtd: 11, inflasiYoy: 12,
+        andilMtm: 13, andilYtd: 14, andilYoy: 15
+      }
+    };
+  }
+
+  throw new Error("Sumber data tidak valid.");
+}
+
+function getSheetData_(source) {
+  const cfg = sourceConfig_(source);
+  const cache = CacheService.getScriptCache();
+  const key = "sheetData:" + source;
+  const cached = cache.get(key);
+
+  if (cached) return JSON.parse(cached);
+
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sh = ss.getSheetByName(cfg.sheetName);
+  if (!sh) throw new Error("Sheet tidak ditemukan: " + cfg.sheetName);
+
+  const lastRow = sh.getLastRow();
+  const lastCol = Math.max(sh.getLastColumn(), source === "final" ? 15 : 14);
+  if (lastRow < 2) return [];
+
+  // getDisplayValues dipakai agar kode kota/komoditas tidak rusak oleh format angka.
+  const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+
+  // Cache data Asem saja. Sheet final sangat besar, jadi tidak dipaksa masuk cache.
+  if (source === "asem") {
+    try {
+      cache.put(key, JSON.stringify(values), CONFIG.CACHE_SECONDS);
+    } catch (err) {}
+  }
+
+  return values;
+}
+
+function getFilters_(source) {
+  const cfg = sourceConfig_(source);
+  const rows = getSheetData_(source);
+  const c = cfg.cols;
+
+  const yearsSet = {};
+  const monthsByYear = {};
+  const flagsSet = {};
+  const cityMap = {};
+
+  rows.forEach(r => {
+    const year = clean_(r[c.year - 1]);
+    const month = clean_(r[c.month - 1]);
+    const flag = clean_(r[c.flag - 1]);
+    const cityCode = clean_(r[c.cityCode - 1]);
+    const cityName = clean_(r[c.cityName - 1]);
+
+    if (year) {
+      yearsSet[year] = true;
+      if (!monthsByYear[year]) monthsByYear[year] = {};
+      if (month) monthsByYear[year][month] = true;
+    }
+    if (flag !== "") flagsSet[flag] = true;
+    if (cityCode) cityMap[cityCode] = cityName;
   });
-}
 
-/**
- * Mengambil seluruh dataset untuk ekspor satu workbook.
- * Setiap properti akan dijadikan sheet terpisah di browser.
- */
-function getAllExportData(token) {
-  requireSession_(token);
+  const years = Object.keys(yearsSet).sort((a,b) => Number(b)-Number(a));
+  const flags = Object.keys(flagsSet).sort(numericSort_);
+  const cities = Object.keys(cityMap)
+    .sort(numericSort_)
+    .map(code => ({ code: code, name: cityMap[code] }));
+
+  const mb = {};
+  Object.keys(monthsByYear).forEach(y => {
+    mb[y] = Object.keys(monthsByYear[y]).sort(numericSort_);
+  });
 
   return {
-    condition: getDataCondition_(),
-    pivotMtm: getPivotData(token, 'mtm'),
-    pivotYtd: getPivotData(token, 'ytd'),
-    pivotYoy: getPivotData(token, 'yoy'),
-    inflationMtm: getInflationPivotData(token, 'mtm', '__ALL__'),
-    inflationYtd: getInflationPivotData(token, 'ytd', '__ALL__'),
-    inflationYoy: getInflationPivotData(token, 'yoy', '__ALL__'),
-    rankMtm: getTopBottomData(token, 'mtm'),
-    rankYtd: getTopBottomData(token, 'ytd'),
-    rankYoy: getTopBottomData(token, 'yoy'),
-    recap: getRecapData(token)
+    years: years,
+    flags: flags,
+    cities: cities,
+    monthsByYear: mb
   };
+}
+
+function getPivotTable_(p) {
+  const source = p.source;
+  const period = String(p.period || "").toLowerCase();
+  const view = String(p.view || "").toLowerCase();
+  const year = String(p.year || "");
+  const month = String(p.month || "");
+  const flag = String(p.flag || "");
+
+  if (!year || !month || flag === "") throw new Error("Tahun, bulan, dan flag harus dipilih.");
+
+  const cfg = sourceConfig_(source);
+  const c = cfg.cols;
+  const metricCol = metricColumn_(c, period, view);
+
+  const rows = getSheetData_(source);
+
+  const cityMap = {};
+  const commodityMap = {};
+  const matrix = {};
+
+  rows.forEach(r => {
+    if (clean_(r[c.year-1]) !== year) return;
+    if (clean_(r[c.month-1]) !== month) return;
+    if (clean_(r[c.flag-1]) !== flag) return;
+
+    const cityCode = clean_(r[c.cityCode-1]);
+    const cityName = clean_(r[c.cityName-1]);
+    const commodityCode = clean_(r[c.commodityCode-1]);
+    const commodityName = clean_(r[c.commodityName-1]);
+
+    if (!cityCode || !commodityCode) return;
+
+    cityMap[cityCode] = cityName;
+    commodityMap[commodityCode] = commodityName;
+
+    if (!matrix[commodityCode]) matrix[commodityCode] = {};
+    matrix[commodityCode][cityCode] = toNumber_(r[metricCol-1]);
+  });
+
+  const cities = Object.keys(cityMap).sort(numericSort_);
+  const commodities = Object.keys(commodityMap).sort(numericSort_);
+
+  const columns = ["Kode Komoditas", "Nama Komoditas"].concat(
+    cities.map(code => code + (cityMap[code] ? " - " + cityMap[code] : ""))
+  );
+
+  const out = commodities.map(code => {
+    const row = [code, commodityMap[code]];
+    cities.forEach(city => {
+      row.push(matrix[code] && matrix[code].hasOwnProperty(city) ? matrix[code][city] : null);
+    });
+    return row;
+  });
+
+  return {
+    title: labelView_(view, period),
+    info: sourceLabel_(source) + " • Tahun " + year + " • Bulan " + month + " • Flag " + flag,
+    columns: columns,
+    rows: out
+  };
+}
+
+function getHeadline_(p) {
+  const source = p.source;
+  const year = String(p.year || "");
+  const month = String(p.month || "");
+
+  if (!year || !month) throw new Error("Tahun dan bulan harus dipilih.");
+
+  const cfg = sourceConfig_(source);
+  const c = cfg.cols;
+  const rows = getSheetData_(source);
+
+  const result = [];
+
+  rows.forEach(r => {
+    if (clean_(r[c.year-1]) !== year) return;
+    if (clean_(r[c.month-1]) !== month) return;
+
+    const flag = clean_(r[c.flag-1]);
+    const commodityCode = clean_(r[c.commodityCode-1]);
+    const commodityName = clean_(r[c.commodityName-1]);
+
+    // Inflasi umum: Flag 0 / kode komoditas 0 / UMUM.
+    if (!(flag === "0" || commodityCode === "0" || commodityName.toUpperCase() === "UMUM")) return;
+
+    result.push([
+      clean_(r[c.cityCode-1]),
+      clean_(r[c.cityName-1]),
+      toNumber_(r[c.inflasiMtm-1]),
+      toNumber_(r[c.inflasiYtd-1]),
+      toNumber_(r[c.inflasiYoy-1])
+    ]);
+  });
+
+  result.sort((a,b) => numericSort_(a[0],b[0]));
+
+  return {
+    title: source === "asem" ? "Inflasi Asem" : "Inflasi Final",
+    info: sourceLabel_(source) + " • Tahun " + year + " • Bulan " + month,
+    columns: ["Kode Kota", "Nama Kota", "Inflasi MtM", "Inflasi YtD", "Inflasi YoY"],
+    rows: result
+  };
+}
+
+function getCommodity_(p) {
+  const source = p.source;
+  const period = String(p.period || "").toLowerCase();
+  const year = String(p.year || "");
+  const month = String(p.month || "");
+  const flag = String(p.flag || "");
+  const city = String(p.city || "");
+  const mode = String(p.mode || "top10");
+
+  if (!year || !month || flag === "" || !city) {
+    throw new Error("Tahun, bulan, flag, dan kode kota harus dipilih.");
+  }
+
+  const cfg = sourceConfig_(source);
+  const c = cfg.cols;
+  const metricCol = metricColumn_(c, period, "andil");
+  const rows = getSheetData_(source);
+
+  const list = [];
+
+  rows.forEach(r => {
+    if (clean_(r[c.year-1]) !== year) return;
+    if (clean_(r[c.month-1]) !== month) return;
+    if (clean_(r[c.flag-1]) !== flag) return;
+    if (clean_(r[c.cityCode-1]) !== city) return;
+
+    const code = clean_(r[c.commodityCode-1]);
+    const name = clean_(r[c.commodityName-1]);
+    if (!code || !name) return;
+
+    const value = toNumber_(r[metricCol-1]);
+    if (value === null) return;
+
+    list.push({ code:code, name:name, value:value });
+  });
+
+  const lowestAll = list.filter(x => x.value < 0).sort((a,b) => a.value - b.value);
+  const highestAll = list.filter(x => x.value > 0).sort((a,b) => b.value - a.value);
+
+  let lowest, highest;
+  if (mode === "threshold") {
+    lowest = lowestAll.filter(x => x.value <= -0.01);
+    highest = highestAll.filter(x => x.value >= 0.01);
+  } else {
+    lowest = lowestAll.slice(0,10);
+    highest = highestAll.slice(0,10);
+  }
+
+  return {
+    lowest: lowest.map((x,i) => [i+1, x.code, x.name, x.value]),
+    highest: highest.map((x,i) => [i+1, x.code, x.name, x.value])
+  };
+}
+
+function metricColumn_(c, period, view) {
+  const prefix = view === "andil" ? "andil" : "inflasi";
+  const suffix = period === "mtm" ? "Mtm" : period === "ytd" ? "Ytd" : period === "yoy" ? "Yoy" : "";
+  if (!suffix) throw new Error("Periode tidak valid.");
+
+  const key = prefix + suffix;
+  if (!c[key]) throw new Error("Kolom metrik tidak ditemukan.");
+  return c[key];
+}
+
+function getUpdatedAt_() {
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty("ASEM_UPDATED_AT") || "";
+  return formatUpdatedAt_(raw);
+}
+
+function setUpdatedAt_(value, token) {
+  validateToken_(token);
+
+  value = String(value || "").trim();
+  if (!value) throw new Error("Tanggal dan jam kosong.");
+
+  PropertiesService.getScriptProperties().setProperty("ASEM_UPDATED_AT", value);
+  return formatUpdatedAt_(value);
+}
+
+function formatUpdatedAt_(raw) {
+  if (!raw) return { raw:"", display:"Belum diatur", inputValue:"" };
+
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) {
+    return { raw:raw, display:raw, inputValue:raw };
+  }
+
+  const tz = Session.getScriptTimeZone() || "Asia/Jakarta";
+  const display = Utilities.formatDate(d, tz, "dd MMMM yyyy, HH:mm") + " WIB";
+  const inputValue = Utilities.formatDate(d, tz, "yyyy-MM-dd'T'HH:mm");
+
+  return { raw:raw, display:display, inputValue:inputValue };
+}
+
+function sourceLabel_(source) {
+  return source === "asem" ? "Angka Sementara" : "Angka Final Inflasi";
+}
+
+function labelView_(view, period) {
+  const p = period === "mtm" ? "MtM" : period === "ytd" ? "YtD" : "YoY";
+  return (view === "andil" ? "Andil " : "Inflasi ") + p;
+}
+
+function clean_(v) {
+  return v === null || v === undefined ? "" : String(v).trim();
+}
+
+function toNumber_(v) {
+  if (v === null || v === undefined || v === "") return null;
+
+  let s = String(v).trim();
+  if (!s) return null;
+
+  // Format Indonesia: titik ribuan, koma desimal.
+  if (s.indexOf(",") >= 0) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+
+  const n = Number(s);
+  return isNaN(n) ? null : n;
+}
+
+function numericSort_(a,b) {
+  const na = Number(a), nb = Number(b);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  return String(a).localeCompare(String(b), "id");
 }
