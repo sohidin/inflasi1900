@@ -2,59 +2,41 @@ const CONFIG = {
   SPREADSHEET_ID: "1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI",
   SHEET_ASEM: "asem",
   SHEET_FINAL: "angka final inflasi",
-
-  // Login
   USERNAME: "harga1900",
   PASSWORD: "harga1900",
 
-  // Cache
-  CACHE_SECONDS: 300
+  // Metadata filter disimpan 6 jam.
+  FILTER_CACHE_SECONDS: 21600,
+
+  // Hasil tabel per kombinasi filter disimpan 10 menit.
+  DATA_CACHE_SECONDS: 600
 };
 
 function doGet(e) {
   try {
     const p = e && e.parameter ? e.parameter : {};
-    const action = String(p.action || "").trim();
+    const action = String(p.action || "");
 
     let result;
-    switch (action) {
-      case "login":
-        result = login_(p.username, p.password);
-        break;
-      case "filters":
-        result = getFilters_(p.source);
-        break;
-      case "table":
-        result = getPivotTable_(p);
-        break;
-      case "headline":
-        result = getHeadline_(p);
-        break;
-      case "commodity":
-        result = getCommodity_(p);
-        break;
-      case "getUpdatedAt":
-        result = getUpdatedAt_();
-        break;
-      case "setUpdatedAt":
-        result = setUpdatedAt_(p.value, p.token);
-        break;
-      case "ping":
-        result = { message: "API aktif" };
-        break;
-      default:
-        throw new Error("Action tidak dikenali.");
-    }
+    if (action === "login") result = login_(p.username, p.password);
+    else if (action === "filters") result = getFilters_(p.source);
+    else if (action === "table") result = getPivotTable_(p);
+    else if (action === "headline") result = getHeadline_(p);
+    else if (action === "commodity") result = getCommodity_(p);
+    else if (action === "getUpdatedAt") result = getUpdatedAt_();
+    else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
+    else if (action === "clearCache") result = clearCache_(p.token);
+    else if (action === "ping") result = {message:"API aktif"};
+    else throw new Error("Action tidak dikenali.");
 
-    return json_({ ok: true, ...result });
+    return json_({ok:true, ...result});
   } catch (err) {
-    return json_({ ok: false, message: err.message || String(err) });
+    return json_({ok:false, message:err.message || String(err)});
   }
 }
 
 function json_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
+  return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -62,33 +44,32 @@ function login_(username, password) {
   if (String(username) !== CONFIG.USERNAME || String(password) !== CONFIG.PASSWORD) {
     throw new Error("Username atau password salah.");
   }
+  return {token:token_()};
+}
 
-  const token = Utilities.base64EncodeWebSafe(
-    Utilities.computeDigest(
-      Utilities.DigestAlgorithm.SHA_256,
-      CONFIG.USERNAME + "|" + CONFIG.PASSWORD + "|" + new Date().toISOString().slice(0,10)
-    )
+function token_() {
+  const base = CONFIG.USERNAME + "|" + CONFIG.PASSWORD + "|" +
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, base)
   );
-
-  return { token: token };
 }
 
 function validateToken_(token) {
-  const expected = login_(CONFIG.USERNAME, CONFIG.PASSWORD).token;
-  if (!token || token !== expected) throw new Error("Sesi login tidak valid.");
+  if (!token || token !== token_()) throw new Error("Sesi login tidak valid.");
 }
 
 function sourceConfig_(source) {
-  source = String(source || "").toLowerCase();
   if (source === "asem") {
     return {
       sheetName: CONFIG.SHEET_ASEM,
+      lastCol: 14,
       cols: {
-        year: 1, month: 2, cityCode: 3, cityName: 4,
-        commodityCode: 5, commodityName: 6, flag: 7,
-        ihk: 8,
-        inflasiMtm: 9, inflasiYtd: 10, inflasiYoy: 11,
-        andilMtm: 12, andilYtd: 13, andilYoy: 14
+        year:1, month:2, cityCode:3, cityName:4,
+        commodityCode:5, commodityName:6, flag:7,
+        ihk:8,
+        inflasiMtm:9, inflasiYtd:10, inflasiYoy:11,
+        andilMtm:12, andilYtd:13, andilYoy:14
       }
     };
   }
@@ -96,12 +77,13 @@ function sourceConfig_(source) {
   if (source === "final") {
     return {
       sheetName: CONFIG.SHEET_FINAL,
+      lastCol: 15,
       cols: {
-        year: 1, month: 2, cityCode: 3, cityName: 4,
-        commodityCode: 5, commodityName: 6, flag: 7,
-        nk: 8, ihk: 9,
-        inflasiMtm: 10, inflasiYtd: 11, inflasiYoy: 12,
-        andilMtm: 13, andilYtd: 14, andilYoy: 15
+        year:1, month:2, cityCode:3, cityName:4,
+        commodityCode:5, commodityName:6, flag:7,
+        nk:8, ihk:9,
+        inflasiMtm:10, inflasiYtd:11, inflasiYoy:12,
+        andilMtm:13, andilYtd:14, andilYoy:15
       }
     };
   }
@@ -109,82 +91,129 @@ function sourceConfig_(source) {
   throw new Error("Sumber data tidak valid.");
 }
 
-function getSheetData_(source) {
+function sheet_(source) {
   const cfg = sourceConfig_(source);
-  const cache = CacheService.getScriptCache();
-  const key = "sheetData:" + source;
-  const cached = cache.get(key);
-
-  if (cached) return JSON.parse(cached);
-
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const sh = ss.getSheetByName(cfg.sheetName);
   if (!sh) throw new Error("Sheet tidak ditemukan: " + cfg.sheetName);
+  return {sh:sh, cfg:cfg};
+}
 
+/**
+ * OPTIMASI UTAMA:
+ * - Tidak lagi membaca 108 ribu x 15 kolom setiap klik.
+ * - Hanya membaca kolom A:B untuk menemukan blok tahun-bulan.
+ * - Setelah blok ditemukan, hanya blok tersebut yang dibaca.
+ * - Posisi blok tahun-bulan di-cache.
+ */
+function getPeriodRows_(source, year, month) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "period:" + source + ":" + year + ":" + month;
+  const cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  const obj = sheet_(source);
+  const sh = obj.sh;
+  const cfg = obj.cfg;
   const lastRow = sh.getLastRow();
-  const lastCol = Math.max(sh.getLastColumn(), source === "final" ? 15 : 14);
   if (lastRow < 2) return [];
 
-  // getDisplayValues dipakai agar kode kota/komoditas tidak rusak oleh format angka.
-  const values = sh.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+  const boundKey = "bounds:" + source + ":" + year + ":" + month;
+  let bounds = cache.get(boundKey);
+  let startRow, rowCount;
 
-  // Cache data Asem saja. Sheet final sangat besar, jadi tidak dipaksa masuk cache.
-  if (source === "asem") {
+  if (bounds) {
+    const b = JSON.parse(bounds);
+    startRow = b.startRow;
+    rowCount = b.rowCount;
+  } else {
+    // Hanya A:B, jauh lebih ringan daripada A:O.
+    const ym = sh.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+
+    let first = -1, last = -1;
+    for (let i = 0; i < ym.length; i++) {
+      if (clean_(ym[i][0]) === String(year) && clean_(ym[i][1]) === String(month)) {
+        if (first === -1) first = i;
+        last = i;
+      } else if (first !== -1 && last !== -1) {
+        // Data diasumsikan terkelompok menurut tahun-bulan.
+        break;
+      }
+    }
+
+    if (first === -1) return [];
+
+    startRow = first + 2;
+    rowCount = last - first + 1;
+
     try {
-      cache.put(key, JSON.stringify(values), CONFIG.CACHE_SECONDS);
-    } catch (err) {}
+      cache.put(boundKey, JSON.stringify({startRow:startRow,rowCount:rowCount}), 21600);
+    } catch (e) {}
   }
 
-  return values;
+  const rows = sh.getRange(startRow, 1, rowCount, cfg.lastCol).getDisplayValues();
+
+  // Cache hasil periode jika ukurannya masih muat.
+  try {
+    const txt = JSON.stringify(rows);
+    if (txt.length < 95000) cache.put(cacheKey, txt, CONFIG.DATA_CACHE_SECONDS);
+  } catch (e) {}
+
+  return rows;
 }
 
 function getFilters_(source) {
-  const cfg = sourceConfig_(source);
-  const rows = getSheetData_(source);
-  const c = cfg.cols;
+  const cache = CacheService.getScriptCache();
+  const key = "filters:" + source;
+  const cached = cache.get(key);
+  if (cached) return JSON.parse(cached);
 
-  const yearsSet = {};
+  const obj = sheet_(source);
+  const sh = obj.sh;
+  const cfg = obj.cfg;
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return {years:[],flags:[],cities:[],monthsByYear:{}};
+
+  // Hanya baca kolom A:G satu kali untuk metadata filter.
+  const rows = sh.getRange(2,1,lastRow-1,7).getDisplayValues();
+
+  const years = {};
   const monthsByYear = {};
-  const flagsSet = {};
-  const cityMap = {};
+  const flags = {};
+  const cities = {};
 
   rows.forEach(r => {
-    const year = clean_(r[c.year - 1]);
-    const month = clean_(r[c.month - 1]);
-    const flag = clean_(r[c.flag - 1]);
-    const cityCode = clean_(r[c.cityCode - 1]);
-    const cityName = clean_(r[c.cityName - 1]);
-
-    if (year) {
-      yearsSet[year] = true;
-      if (!monthsByYear[year]) monthsByYear[year] = {};
-      if (month) monthsByYear[year][month] = true;
+    const y=clean_(r[0]), m=clean_(r[1]), code=clean_(r[2]), name=clean_(r[3]), flag=clean_(r[6]);
+    if(y){
+      years[y]=true;
+      if(!monthsByYear[y]) monthsByYear[y]={};
+      if(m) monthsByYear[y][m]=true;
     }
-    if (flag !== "") flagsSet[flag] = true;
-    if (cityCode) cityMap[cityCode] = cityName;
+    if(flag!=="") flags[flag]=true;
+    if(code) cities[code]=name;
   });
 
-  const years = Object.keys(yearsSet).sort((a,b) => Number(b)-Number(a));
-  const flags = Object.keys(flagsSet).sort(numericSort_);
-  const cities = Object.keys(cityMap)
-    .sort(numericSort_)
-    .map(code => ({ code: code, name: cityMap[code] }));
-
-  const mb = {};
-  Object.keys(monthsByYear).forEach(y => {
-    mb[y] = Object.keys(monthsByYear[y]).sort(numericSort_);
-  });
-
-  return {
-    years: years,
-    flags: flags,
-    cities: cities,
-    monthsByYear: mb
+  const result = {
+    years:Object.keys(years).sort((a,b)=>Number(b)-Number(a)),
+    flags:Object.keys(flags).sort(numericSort_),
+    cities:Object.keys(cities).sort(numericSort_).map(code=>({code:code,name:cities[code]})),
+    monthsByYear:{}
   };
+
+  Object.keys(monthsByYear).forEach(y=>{
+    result.monthsByYear[y]=Object.keys(monthsByYear[y]).sort(numericSort_);
+  });
+
+  try{
+    const txt=JSON.stringify(result);
+    if(txt.length<95000) cache.put(key,txt,CONFIG.FILTER_CACHE_SECONDS);
+  }catch(e){}
+
+  return result;
 }
 
 function getPivotTable_(p) {
-  const source = p.source;
+  const source = String(p.source || "");
   const period = String(p.period || "").toLowerCase();
   const view = String(p.view || "").toLowerCase();
   const year = String(p.year || "");
@@ -193,83 +222,78 @@ function getPivotTable_(p) {
 
   if (!year || !month || flag === "") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
+  const cache = CacheService.getScriptCache();
+  const key = ["pivot",source,period,view,year,month,flag].join(":");
+  const cached = cache.get(key);
+  if(cached) return JSON.parse(cached);
+
   const cfg = sourceConfig_(source);
   const c = cfg.cols;
   const metricCol = metricColumn_(c, period, view);
-
-  const rows = getSheetData_(source);
+  const rows = getPeriodRows_(source, year, month);
 
   const cityMap = {};
   const commodityMap = {};
   const matrix = {};
 
   rows.forEach(r => {
-    if (clean_(r[c.year-1]) !== year) return;
-    if (clean_(r[c.month-1]) !== month) return;
     if (clean_(r[c.flag-1]) !== flag) return;
 
-    const cityCode = clean_(r[c.cityCode-1]);
-    const cityName = clean_(r[c.cityName-1]);
-    const commodityCode = clean_(r[c.commodityCode-1]);
-    const commodityName = clean_(r[c.commodityName-1]);
+    const cityCode=clean_(r[c.cityCode-1]);
+    const cityName=clean_(r[c.cityName-1]);
+    const commodityCode=clean_(r[c.commodityCode-1]);
+    const commodityName=clean_(r[c.commodityName-1]);
+    if(!cityCode || !commodityCode) return;
 
-    if (!cityCode || !commodityCode) return;
-
-    cityMap[cityCode] = cityName;
-    commodityMap[commodityCode] = commodityName;
-
-    if (!matrix[commodityCode]) matrix[commodityCode] = {};
-    matrix[commodityCode][cityCode] = toNumber_(r[metricCol-1]);
+    cityMap[cityCode]=cityName;
+    commodityMap[commodityCode]=commodityName;
+    if(!matrix[commodityCode]) matrix[commodityCode]={};
+    matrix[commodityCode][cityCode]=toNumber_(r[metricCol-1]);
   });
 
-  const cities = Object.keys(cityMap).sort(numericSort_);
-  const commodities = Object.keys(commodityMap).sort(numericSort_);
+  const cityCodes=Object.keys(cityMap).sort(numericSort_);
+  const commodityCodes=Object.keys(commodityMap).sort(numericSort_);
 
-  const columns = ["Kode Komoditas", "Nama Komoditas"].concat(
-    cities.map(code => code + (cityMap[code] ? " - " + cityMap[code] : ""))
-  );
-
-  const out = commodities.map(code => {
-    const row = [code, commodityMap[code]];
-    cities.forEach(city => {
-      row.push(matrix[code] && matrix[code].hasOwnProperty(city) ? matrix[code][city] : null);
-    });
-    return row;
-  });
-
-  return {
-    title: labelView_(view, period),
-    info: sourceLabel_(source) + " • Tahun " + year + " • Bulan " + month + " • Flag " + flag,
-    columns: columns,
-    rows: out
+  const result = {
+    title:labelView_(view,period),
+    info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month+" • Flag "+flag,
+    columns:["Kode Komoditas","Nama Komoditas"].concat(cityCodes.map(code=>code+" - "+cityMap[code])),
+    rows:commodityCodes.map(code=>{
+      const out=[code,commodityMap[code]];
+      cityCodes.forEach(city=>out.push(
+        matrix[code] && Object.prototype.hasOwnProperty.call(matrix[code],city) ? matrix[code][city] : null
+      ));
+      return out;
+    })
   };
+
+  cacheSmall_(key,result);
+  return result;
 }
 
 function getHeadline_(p) {
-  const source = p.source;
-  const year = String(p.year || "");
-  const month = String(p.month || "");
+  const source=String(p.source||"");
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  if(!year||!month) throw new Error("Tahun dan bulan harus dipilih.");
 
-  if (!year || !month) throw new Error("Tahun dan bulan harus dipilih.");
+  const key=["headline",source,year,month].join(":");
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
 
-  const cfg = sourceConfig_(source);
-  const c = cfg.cols;
-  const rows = getSheetData_(source);
+  const cfg=sourceConfig_(source);
+  const c=cfg.cols;
+  const rows=getPeriodRows_(source,year,month);
 
-  const result = [];
+  const resultRows=[];
+  rows.forEach(r=>{
+    const flag=clean_(r[c.flag-1]);
+    const code=clean_(r[c.commodityCode-1]);
+    const name=clean_(r[c.commodityName-1]).toUpperCase();
+    if(!(flag==="0" || code==="0" || name==="UMUM")) return;
 
-  rows.forEach(r => {
-    if (clean_(r[c.year-1]) !== year) return;
-    if (clean_(r[c.month-1]) !== month) return;
-
-    const flag = clean_(r[c.flag-1]);
-    const commodityCode = clean_(r[c.commodityCode-1]);
-    const commodityName = clean_(r[c.commodityName-1]);
-
-    // Inflasi umum: Flag 0 / kode komoditas 0 / UMUM.
-    if (!(flag === "0" || commodityCode === "0" || commodityName.toUpperCase() === "UMUM")) return;
-
-    result.push([
+    resultRows.push([
       clean_(r[c.cityCode-1]),
       clean_(r[c.cityName-1]),
       toNumber_(r[c.inflasiMtm-1]),
@@ -278,141 +302,125 @@ function getHeadline_(p) {
     ]);
   });
 
-  result.sort((a,b) => numericSort_(a[0],b[0]));
+  resultRows.sort((a,b)=>numericSort_(a[0],b[0]));
 
-  return {
-    title: source === "asem" ? "Inflasi Asem" : "Inflasi Final",
-    info: sourceLabel_(source) + " • Tahun " + year + " • Bulan " + month,
-    columns: ["Kode Kota", "Nama Kota", "Inflasi MtM", "Inflasi YtD", "Inflasi YoY"],
-    rows: result
+  const result={
+    title:source==="asem"?"Inflasi Asem":"Inflasi Final",
+    info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month,
+    columns:["Kode Kota","Nama Kota","Inflasi MtM","Inflasi YtD","Inflasi YoY"],
+    rows:resultRows
   };
+
+  cacheSmall_(key,result);
+  return result;
 }
 
 function getCommodity_(p) {
-  const source = p.source;
-  const period = String(p.period || "").toLowerCase();
-  const year = String(p.year || "");
-  const month = String(p.month || "");
-  const flag = String(p.flag || "");
-  const city = String(p.city || "");
-  const mode = String(p.mode || "top10");
+  const source=String(p.source||"");
+  const period=String(p.period||"").toLowerCase();
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  const flag=String(p.flag||"");
+  const city=String(p.city||"");
+  const mode=String(p.mode||"top10");
 
-  if (!year || !month || flag === "" || !city) {
-    throw new Error("Tahun, bulan, flag, dan kode kota harus dipilih.");
-  }
+  if(!year||!month||flag===""||!city) throw new Error("Tahun, bulan, flag, dan kode kota harus dipilih.");
 
-  const cfg = sourceConfig_(source);
-  const c = cfg.cols;
-  const metricCol = metricColumn_(c, period, "andil");
-  const rows = getSheetData_(source);
+  const key=["commodity",source,period,year,month,flag,city,mode].join(":");
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
 
-  const list = [];
+  const cfg=sourceConfig_(source);
+  const c=cfg.cols;
+  const metricCol=metricColumn_(c,period,"andil");
+  const rows=getPeriodRows_(source,year,month);
 
-  rows.forEach(r => {
-    if (clean_(r[c.year-1]) !== year) return;
-    if (clean_(r[c.month-1]) !== month) return;
-    if (clean_(r[c.flag-1]) !== flag) return;
-    if (clean_(r[c.cityCode-1]) !== city) return;
+  const list=[];
+  rows.forEach(r=>{
+    if(clean_(r[c.flag-1])!==flag) return;
+    if(clean_(r[c.cityCode-1])!==city) return;
 
-    const code = clean_(r[c.commodityCode-1]);
-    const name = clean_(r[c.commodityName-1]);
-    if (!code || !name) return;
-
-    const value = toNumber_(r[metricCol-1]);
-    if (value === null) return;
-
-    list.push({ code:code, name:name, value:value });
+    const code=clean_(r[c.commodityCode-1]);
+    const name=clean_(r[c.commodityName-1]);
+    const value=toNumber_(r[metricCol-1]);
+    if(!code||!name||value===null) return;
+    list.push({code:code,name:name,value:value});
   });
 
-  const lowestAll = list.filter(x => x.value < 0).sort((a,b) => a.value - b.value);
-  const highestAll = list.filter(x => x.value > 0).sort((a,b) => b.value - a.value);
+  const lows=list.filter(x=>x.value<0).sort((a,b)=>a.value-b.value);
+  const highs=list.filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
 
-  let lowest, highest;
-  if (mode === "threshold") {
-    lowest = lowestAll.filter(x => x.value <= -0.01);
-    highest = highestAll.filter(x => x.value >= 0.01);
-  } else {
-    lowest = lowestAll.slice(0,10);
-    highest = highestAll.slice(0,10);
-  }
+  const lowFinal=mode==="threshold"?lows.filter(x=>x.value<=-0.01):lows.slice(0,10);
+  const highFinal=mode==="threshold"?highs.filter(x=>x.value>=0.01):highs.slice(0,10);
 
-  return {
-    lowest: lowest.map((x,i) => [i+1, x.code, x.name, x.value]),
-    highest: highest.map((x,i) => [i+1, x.code, x.name, x.value])
+  const result={
+    lowest:lowFinal.map((x,i)=>[i+1,x.code,x.name,x.value]),
+    highest:highFinal.map((x,i)=>[i+1,x.code,x.name,x.value])
   };
+
+  cacheSmall_(key,result);
+  return result;
 }
 
-function metricColumn_(c, period, view) {
-  const prefix = view === "andil" ? "andil" : "inflasi";
-  const suffix = period === "mtm" ? "Mtm" : period === "ytd" ? "Ytd" : period === "yoy" ? "Yoy" : "";
-  if (!suffix) throw new Error("Periode tidak valid.");
-
-  const key = prefix + suffix;
-  if (!c[key]) throw new Error("Kolom metrik tidak ditemukan.");
+function metricColumn_(c,period,view){
+  const prefix=view==="andil"?"andil":"inflasi";
+  const suffix=period==="mtm"?"Mtm":period==="ytd"?"Ytd":period==="yoy"?"Yoy":"";
+  const key=prefix+suffix;
+  if(!suffix||!c[key]) throw new Error("Periode/metrik tidak valid.");
   return c[key];
 }
 
-function getUpdatedAt_() {
-  const props = PropertiesService.getScriptProperties();
-  const raw = props.getProperty("ASEM_UPDATED_AT") || "";
+function cacheSmall_(key,obj){
+  try{
+    const txt=JSON.stringify(obj);
+    if(txt.length<95000) CacheService.getScriptCache().put(key,txt,CONFIG.DATA_CACHE_SECONDS);
+  }catch(e){}
+}
+
+function getUpdatedAt_(){
+  const raw=PropertiesService.getScriptProperties().getProperty("ASEM_UPDATED_AT")||"";
   return formatUpdatedAt_(raw);
 }
-
-function setUpdatedAt_(value, token) {
+function setUpdatedAt_(value,token){
   validateToken_(token);
-
-  value = String(value || "").trim();
-  if (!value) throw new Error("Tanggal dan jam kosong.");
-
-  PropertiesService.getScriptProperties().setProperty("ASEM_UPDATED_AT", value);
+  value=String(value||"").trim();
+  if(!value) throw new Error("Tanggal dan jam belum diisi.");
+  PropertiesService.getScriptProperties().setProperty("ASEM_UPDATED_AT",value);
   return formatUpdatedAt_(value);
 }
-
-function formatUpdatedAt_(raw) {
-  if (!raw) return { raw:"", display:"Belum diatur", inputValue:"" };
-
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) {
-    return { raw:raw, display:raw, inputValue:raw };
-  }
-
-  const tz = Session.getScriptTimeZone() || "Asia/Jakarta";
-  const display = Utilities.formatDate(d, tz, "dd MMMM yyyy, HH:mm") + " WIB";
-  const inputValue = Utilities.formatDate(d, tz, "yyyy-MM-dd'T'HH:mm");
-
-  return { raw:raw, display:display, inputValue:inputValue };
+function formatUpdatedAt_(raw){
+  if(!raw) return {display:"Belum diatur",inputValue:""};
+  const d=new Date(raw);
+  if(isNaN(d.getTime())) return {display:raw,inputValue:raw};
+  const tz=Session.getScriptTimeZone()||"Asia/Jakarta";
+  return {
+    display:Utilities.formatDate(d,tz,"dd MMMM yyyy, HH:mm")+" WIB",
+    inputValue:Utilities.formatDate(d,tz,"yyyy-MM-dd'T'HH:mm")
+  };
 }
 
-function sourceLabel_(source) {
-  return source === "asem" ? "Angka Sementara" : "Angka Final Inflasi";
+function clearCache_(token){
+  validateToken_(token);
+  // CacheService tidak menyediakan clear-all; ubah CACHE_VERSION jika ingin reset menyeluruh.
+  return {message:"Cache akan kedaluwarsa otomatis."};
 }
 
-function labelView_(view, period) {
-  const p = period === "mtm" ? "MtM" : period === "ytd" ? "YtD" : "YoY";
-  return (view === "andil" ? "Andil " : "Inflasi ") + p;
+function sourceLabel_(source){return source==="asem"?"Angka Sementara":"Angka Final Inflasi";}
+function labelView_(view,period){
+  const p=period==="mtm"?"MtM":period==="ytd"?"YtD":"YoY";
+  return (view==="andil"?"Andil ":"Inflasi ")+p;
 }
-
-function clean_(v) {
-  return v === null || v === undefined ? "" : String(v).trim();
+function clean_(v){return v===null||v===undefined?"":String(v).trim();}
+function toNumber_(v){
+  if(v===null||v===undefined||v==="") return null;
+  let s=String(v).trim();
+  if(s.indexOf(",")>=0) s=s.replace(/\./g,"").replace(",",".");
+  const n=Number(s);
+  return isNaN(n)?null:n;
 }
-
-function toNumber_(v) {
-  if (v === null || v === undefined || v === "") return null;
-
-  let s = String(v).trim();
-  if (!s) return null;
-
-  // Format Indonesia: titik ribuan, koma desimal.
-  if (s.indexOf(",") >= 0) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  }
-
-  const n = Number(s);
-  return isNaN(n) ? null : n;
-}
-
-function numericSort_(a,b) {
-  const na = Number(a), nb = Number(b);
-  if (!isNaN(na) && !isNaN(nb)) return na - nb;
-  return String(a).localeCompare(String(b), "id");
+function numericSort_(a,b){
+  const na=Number(a),nb=Number(b);
+  if(!isNaN(na)&&!isNaN(nb)) return na-nb;
+  return String(a).localeCompare(String(b),"id");
 }

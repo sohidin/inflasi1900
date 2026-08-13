@@ -1,90 +1,74 @@
-# Dashboard Inflasi 1900
+# Dashboard Inflasi 1900 — Versi 2
 
-Website GitHub Pages + backend Google Apps Script untuk Spreadsheet:
-`1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI`
+Versi ini disederhanakan menjadi hanya 5 file:
 
-## Fitur
+1. `Code.gs`
+2. `README.md`
+3. `index.html`
+4. `script.js`
+5. `style.css`
 
-- Login `harga1900 / harga1900`
-- Angka Sementara
-  - MtM: Inflasi, Andil, Komoditas Andil
-  - YtD: Inflasi, Andil, Komoditas Andil
-  - YoY: Inflasi, Andil, Komoditas Andil
-  - Inflasi Asem
-- Angka Final Inflasi
-  - MtM: Inflasi, Andil, Komoditas Andil
-  - YtD: Inflasi, Andil, Komoditas Andil
-  - YoY: Inflasi, Andil, Komoditas Andil
-  - Inflasi Final
-- Filter Tahun, Bulan, Flag
-- Filter Kode Kota pada menu Komoditas
-- Top 10 tertinggi/terendah atau batas |andil| >= 0,01
-- Sort, Search
-- Download Excel, CSV, PDF, PNG
-- Data per tanggal/bulan/tahun/jam khusus Angka Sementara dan dapat diedit
+## Perbaikan versi ini
 
-## 1. Pasang Backend Apps Script
+- Sidebar awal hanya menampilkan:
+  - Angka Sementara
+  - Angka Final Inflasi
+- Submenu tampil saat menu utama diklik.
+- MtM/YtD/YoY juga dibuat bertingkat agar sidebar tetap pendek.
+- Tampilan dibuat lebih modern dan eye catching.
+- Login tetap `harga1900 / harga1900`.
+- Semua tabel tetap dapat sort, filter/search, Excel, CSV, PDF, Image.
+- Menu komoditas tetap memiliki:
+  - Top 10 tertinggi/terendah
+  - Filter |andil| >= 0,01
+- Informasi `Data sementara per` tetap editable.
 
-1. Buka https://script.google.com
-2. Buat project baru.
-3. Hapus isi `Code.gs`.
-4. Copy seluruh isi file `Code.gs` dari folder ini.
-5. Pastikan Time zone project = Asia/Jakarta.
-6. Klik **Deploy > New deployment**.
-7. Pilih **Web app**.
-8. Execute as: **Me**
-9. Who has access: **Anyone**
-10. Klik Deploy.
-11. Salin URL Web App yang berakhiran `/exec`.
+## Optimasi loading
 
-> Akun Google yang melakukan deploy harus memiliki akses ke spreadsheet.
+Versi sebelumnya membaca banyak kolom dari seluruh sheet final (>108 ribu baris).
 
-## 2. Masukkan URL Web App
+Versi ini:
+1. hanya membaca kolom A:B untuk mencari posisi blok tahun-bulan,
+2. kemudian hanya membaca baris pada tahun-bulan tersebut,
+3. hasil filter dan tabel di-cache sementara di Apps Script.
 
-Buka:
+Karena itu request setelah pemilihan tahun-bulan seharusnya jauh lebih cepat.
 
-`js/config.js`
+## Cara pasang
 
-Ganti:
+### A. Apps Script
+
+1. Buka project Apps Script yang terhubung dengan spreadsheet.
+2. Ganti seluruh isi `Code.gs` dengan file `Code.gs` versi ini.
+3. Pastikan timezone project `Asia/Jakarta`.
+4. Deploy:
+   - Deploy > Manage deployments
+   - Edit deployment
+   - Version: New version
+   - Deploy
+5. Salin URL `/exec`.
+
+### B. Website GitHub
+
+1. Buka `script.js`.
+2. Ganti:
 
 ```js
 API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
 ```
 
-menjadi contoh:
+dengan URL Web App Apps Script.
 
-```js
-API_URL: "https://script.google.com/macros/s/AKfycbxxxxxxx/exec"
-```
+3. Upload 4 file web berikut ke root repository:
+   - `index.html`
+   - `script.js`
+   - `style.css`
+   - `README.md`
 
-## 3. Upload ke GitHub
+4. Aktifkan GitHub Pages dari branch `main`.
 
-Upload ke repository:
+## Catatan
 
-- `index.html`
-- `dashboard.html`
-- folder `css`
-- folder `js`
-- folder `assets` bila nanti ingin menambahkan logo
+Jumlah file frontend tidak menentukan cepat-lambat pembacaan data secara signifikan. Penyebab utama adalah ukuran data yang dibaca dari Google Sheets dan jumlah pekerjaan di Apps Script.
 
-## 4. Aktifkan GitHub Pages
-
-Repository > Settings > Pages
-
-- Source: Deploy from a branch
-- Branch: `main`
-- Folder: `/ (root)`
-
-Simpan.
-
-GitHub kemudian memberikan URL website.
-
-## Catatan performa
-
-Sheet `angka final inflasi` lebih dari 100 ribu baris. Versi awal ini tetap membaca data server-side di Apps Script sehingga browser tidak menerima seluruh isi sheet. Jika nanti performa terasa lambat, tahap optimalisasi berikutnya adalah membuat sheet/helper cache atau indeks data per tahun-bulan.
-
-## Catatan keamanan
-
-Login pada website diproses melalui Apps Script, sehingga password tidak ditulis di JavaScript GitHub. Namun ini tetap autentikasi ringan, bukan sistem keamanan tingkat enterprise.
-
-Untuk dashboard internal sederhana, mekanisme ini cukup praktis.
+File frontend yang lebih banyak hanya menambah beberapa request kecil. Setelah browser cache, pengaruhnya biasanya sangat kecil dibanding membaca puluhan/ratusan ribu baris spreadsheet.
