@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
+  API_URL: "https://script.google.com/macros/s/AKfycbzmHCrQOwwqhtiaRXZpCiPOAjfgerLblMwCEl-8OMYS_KCKrw3Oxt8GgCWdxiyf5PYJ/exec"
 };
 
 const state = {
@@ -548,9 +548,6 @@ async function downloadCommodityPagePdf(){
     const cardAreaH = usableH - headerHeightPt - gap;
 
     const content = [];
-    let firstPage = true
-
-
     let firstPage = true;
 
     for(const item of rendered){

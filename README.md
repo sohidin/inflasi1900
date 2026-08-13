@@ -99,3 +99,8 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 - Jika sebuah card terlalu tinggi, card diperkecil proporsional agar seluruhnya tetap terlihat, bukan di-crop.
 - Header jenis data dan waktu download tetap tampil pada setiap halaman PDF.
 - Search global tetap dihormati saat ekspor.
+
+
+## V8.1 Hotfix
+- Fix syntax error deklarasi `firstPage` ganda pada `script.js` V8 yang membuat seluruh JavaScript berhenti, termasuk tombol login.
+- Export PDF/Image anti-crop V8 tetap dipertahankan.
