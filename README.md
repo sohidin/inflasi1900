@@ -81,3 +81,11 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 - CACHE_VERSION dinaikkan ke v6 agar cache lama yang hanya menampilkan kode kota 1900 tidak digunakan.
 - Fix Final multi-kab/kota dari V5 tetap dipertahankan.
 - Download Komoditas Andil tetap mencakup seluruh kab/kota.
+
+
+## V7
+- Global search untuk seluruh tabel Komoditas Andil.
+- PDF/Image mengambil visual halaman web (card, header kota, tabel kiri-kanan).
+- PDF otomatis dibagi menjadi beberapa halaman bila tinggi, namun visual web tetap dipertahankan.
+- Semua download memuat jenis data (Angka Sementara/Angka Final Inflasi) serta tanggal dan jam download.
+- Nama file Excel/CSV/PDF/Image juga memuat jenis data dan timestamp.

@@ -277,3 +277,21 @@ table.dataTable tbody td:not(:first-child){
   font-variant-numeric:tabular-nums;
   font-weight:700;
 }
+
+/* ===== V7: Commodity search + export visual ===== */
+.commodity-title-block{flex:1;min-width:320px}
+.commodity-search-wrap{position:relative;margin-top:12px;max-width:560px}
+.commodity-search-wrap input{width:100%;height:42px;border:1px solid #d8e5ef;background:#f8fbfd;border-radius:12px;padding:0 42px 0 38px;color:#17334a;outline:none;transition:.18s ease}
+.commodity-search-wrap input:focus{border-color:#45aeda;background:#fff;box-shadow:0 0 0 4px rgba(34,177,227,.10)}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#6f9bbb;font-size:18px;pointer-events:none}
+.search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#7a91a4;cursor:pointer;font-size:20px}
+.search-clear:hover{background:#eaf3f8;color:#25475f}
+.export-report-header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;background:linear-gradient(135deg,#0b355a,#0d507c);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px;box-shadow:0 10px 28px rgba(18,66,101,.14)}
+.export-brand-badge{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#1f9fe0,#20c1de);font-weight:800;font-size:16px}
+.export-kicker{font-size:10px;letter-spacing:.16em;font-weight:800;color:#86d8fa}
+.export-main-title{font-size:21px;font-weight:800;margin-top:3px}
+.export-subtitle{font-size:11px;color:#c8dfed;margin-top:4px}
+.export-time-box{min-width:190px;text-align:right;padding-left:16px;border-left:1px solid rgba(255,255,255,.18)}
+.export-time-box span{display:block;font-size:9px;color:#8fcce8;text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+.export-time-box strong{display:block;font-size:11px;margin:2px 0}
+@media(max-width:900px){.commodity-search-wrap{max-width:none}}

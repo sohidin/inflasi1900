@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbzmHCrQOwwqhtiaRXZpCiPOAjfgerLblMwCEl-8OMYS_KCKrw3Oxt8GgCWdxiyf5PYJ/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbwiE8hcejiN52plCj8hHNjOb3j0tmxD_5-17YWf7rZkmiGVgvVY5RRNUIeJtpSfPQcX/exec"
 };
 
 const state = {
@@ -135,6 +135,11 @@ function bindAppEvents(){
   document.getElementById("downloadCommodityPdf").addEventListener("click", downloadCommodityPagePdf);
   document.getElementById("downloadCommodityExcel").addEventListener("click", downloadCommodityWorkbook);
   document.getElementById("downloadCommodityCsv").addEventListener("click", downloadCommodityCsv);
+  document.getElementById("commodityGlobalSearch")?.addEventListener("input", applyCommodityGlobalSearch);
+  document.getElementById("clearCommoditySearch")?.addEventListener("click", () => {
+    const el = document.getElementById("commodityGlobalSearch");
+    if(el){ el.value=""; applyCommodityGlobalSearch(); el.focus(); }
+  });
 }
 
 async function loadSourceFilters(){
@@ -283,6 +288,7 @@ function renderCommodity(r){
     `;
     wrap.appendChild(sec);
   });
+  applyCommodityGlobalSearch();
 }
 function commodityHtmlTable(rows){
   let html = `<table class="commodity-plain-table"><thead><tr>
@@ -309,6 +315,20 @@ function escapeHtml(v){
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
   }[c]));
 }
+function applyCommodityGlobalSearch(){
+  const input=document.getElementById("commodityGlobalSearch");
+  const query=String(input?.value||"").trim().toLowerCase();
+  document.querySelectorAll("#commodityAllCities .city-section").forEach(citySec=>{
+    let cityHasVisible=false;
+    citySec.querySelectorAll(".commodity-plain-table tbody tr").forEach(tr=>{
+      const visible=!query || tr.textContent.toLowerCase().includes(query);
+      tr.style.display=visible?"":"none";
+      if(visible) cityHasVisible=true;
+    });
+    citySec.style.display=(!query||cityHasVisible)?"":"none";
+  });
+}
+
 function renderCell(data,type){
   if(type!=="display") return data;
   if(typeof data==="number"){
@@ -348,156 +368,111 @@ async function saveUpdatedAt(){
   }catch(err){alert(err.message);}
 }
 async function downloadCommodityPageImage(){
-  // Export container SELURUH kab/kota, bukan tabel pertama.
-  const el = document.getElementById("commoditySection");
-  const original = el.style.width;
-  try{
-    // Lebar ekspor konsisten supaya seluruh kartu kab/kota masuk.
-    el.style.width = "1400px";
-    const canvas = await html2canvas(el,{
-      backgroundColor:"#f4f7fb",
-      scale:1.25,
-      useCORS:true,
-      windowWidth:1500,
-      scrollX:0,
-      scrollY:0
-    });
-    const a=document.createElement("a");
-    a.download=safeName(exportTitle()+"-semua-kabkot")+".png";
-    a.href=canvas.toDataURL("image/png");
-    a.click();
-  }finally{
-    el.style.width=original;
+  const {canvas,meta}=await renderCommodityExportCanvas();
+  const a=document.createElement("a");
+  a.download=safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".png";
+  a.href=canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadCommodityPagePdf(){
+  const {canvas,meta}=await renderCommodityExportCanvas();
+  const pageWidthPt=841.89,pageHeightPt=595.28,marginPt=18;
+  const usableW=pageWidthPt-marginPt*2,usableH=pageHeightPt-marginPt*2;
+  const pxPerPt=canvas.width/usableW;
+  const sliceHeightPx=Math.max(1,Math.floor(usableH*pxPerPt));
+  const content=[];
+  let y=0,page=0;
+  while(y<canvas.height){
+    const h=Math.min(sliceHeightPx,canvas.height-y);
+    const slice=document.createElement("canvas");
+    slice.width=canvas.width;slice.height=h;
+    const ctx=slice.getContext("2d");
+    ctx.fillStyle="#f4f7fb";ctx.fillRect(0,0,slice.width,slice.height);
+    ctx.drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+    if(page>0) content.push({text:"",pageBreak:"before"});
+    content.push({image:slice.toDataURL("image/png"),width:usableW});
+    y+=h;page++;
   }
+  pdfMake.createPdf({pageSize:"A4",pageOrientation:"landscape",pageMargins:[marginPt,marginPt,marginPt,marginPt],content,
+    info:{title:`${meta.source} - ${viewTitle()}`,subject:`Download ${meta.dateText} ${meta.timeText}`}
+  }).download(safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".pdf");
 }
 
-function downloadCommodityPagePdf(){
-  const data = state.commodityData?.cities || [];
-  if(!data.length){ alert("Data komoditas belum tersedia."); return; }
+function getDownloadMeta(){
+  const now=new Date();
+  const source=state.source==="asem"?"Angka Sementara":"Angka Final Inflasi";
+  const dateText=now.toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"});
+  const timeText=now.toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).replace(/\./g,":");
+  const fileStamp=now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0")+"_"+
+    String(now.getHours()).padStart(2,"0")+String(now.getMinutes()).padStart(2,"0")+String(now.getSeconds()).padStart(2,"0");
+  return {source,dateText,timeText,fileStamp};
+}
 
-  // PDF disusun dari DATA seluruh kab/kota, bukan screenshot elemen pertama.
-  // Setiap kab/kota berisi dua tabel; semuanya masuk dalam satu file PDF.
-  const content = [
-    {text:viewTitle(), style:"title"},
-    {text:`${state.source==="asem"?"Angka Sementara":"Angka Final Inflasi"} • Tahun ${valueOf("filterYear")} • Bulan ${valueOf("filterMonth")} • Flag ${valueOf("filterFlag")}`, style:"subtitle", margin:[0,0,0,10]}
-  ];
-
-  data.forEach((city, idx)=>{
-    if(idx>0) content.push({text:"", pageBreak:"before"});
-    content.push({
-      columns:[
-        {text:`${city.code} - ${city.name}`, style:"cityTitle"},
-        {text:`Kab/Kota ${idx+1} dari ${data.length}`, alignment:"right", color:"#718096", fontSize:8}
-      ],
-      margin:[0,0,0,8]
-    });
-    content.push({
-      columns:[
-        {width:"*", stack:[
-          {text:"Andil Terendah", style:"sectionLow"},
-          commodityPdfTable(city.lowest)
-        ]},
-        {width:12,text:""},
-        {width:"*", stack:[
-          {text:"Andil Tertinggi", style:"sectionHigh"},
-          commodityPdfTable(city.highest)
-        ]}
-      ]
-    });
+function buildCommodityExportClone(){
+  const meta=getDownloadMeta();
+  const sourceEl=document.getElementById("commoditySection");
+  const clone=sourceEl.cloneNode(true);
+  clone.id="commodityExportClone";clone.classList.remove("hidden");
+  clone.style.width="1400px";clone.style.maxWidth="1400px";clone.style.margin="0";clone.style.padding="24px";clone.style.background="#f4f7fb";
+  clone.querySelector(".commodity-downloads")?.remove();
+  clone.querySelector(".commodity-search-wrap")?.remove();
+  const header=document.createElement("div");
+  header.className="export-report-header";
+  header.innerHTML=`<div class="export-brand-badge">IF</div><div class="export-head-copy"><div class="export-kicker">DASHBOARD MONITORING INFLASI</div><div class="export-main-title">${escapeHtml(viewTitle())}</div><div class="export-subtitle">${escapeHtml(meta.source)} • Tahun ${escapeHtml(valueOf("filterYear"))} • Bulan ${escapeHtml(valueOf("filterMonth"))} • Flag ${escapeHtml(valueOf("filterFlag"))}</div></div><div class="export-time-box"><span>Waktu Download</span><strong>${escapeHtml(meta.dateText)}</strong><strong>${escapeHtml(meta.timeText)}</strong></div>`;
+  clone.insertBefore(header,clone.firstChild);
+  const originalCities=[...document.querySelectorAll("#commodityAllCities .city-section")];
+  const clonedCities=[...clone.querySelectorAll("#commodityAllCities .city-section")];
+  originalCities.forEach((origCity,idx)=>{
+    const cc=clonedCities[idx]; if(!cc)return;
+    cc.style.display=origCity.style.display;
+    const orows=[...origCity.querySelectorAll(".commodity-plain-table tbody tr")];
+    const crows=[...cc.querySelectorAll(".commodity-plain-table tbody tr")];
+    orows.forEach((r,i)=>{if(crows[i])crows[i].style.display=r.style.display;});
   });
-
-  pdfMake.createPdf({
-    pageSize:"A4",
-    pageOrientation:"landscape",
-    pageMargins:[24,24,24,24],
-    content,
-    styles:{
-      title:{fontSize:16,bold:true,color:"#0b355a"},
-      subtitle:{fontSize:9,color:"#718096"},
-      cityTitle:{fontSize:12,bold:true,color:"#0b355a"},
-      sectionLow:{fontSize:10,bold:true,color:"#b42318",margin:[0,0,0,5]},
-      sectionHigh:{fontSize:10,bold:true,color:"#067647",margin:[0,0,0,5]}
-    },
-    defaultStyle:{fontSize:7}
-  }).download(safeName(exportTitle()+"-semua-kabkot")+".pdf");
+  document.body.appendChild(clone);
+  return {clone,meta};
 }
 
-function commodityPdfTable(rows){
-  const body=[[
-    {text:"No",bold:true},{text:"Kode",bold:true},{text:"Nama Komoditas",bold:true},{text:"Andil",bold:true}
-  ]];
-  (rows||[]).forEach(r=>body.push([
-    String(r[0]),String(r[1]),String(r[2]),
-    Number(r[3]).toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})
-  ]));
-  if(body.length===1) body.push(["","","Tidak ada data",""]);
-  return {
-    table:{headerRows:1,widths:[22,55,"*",48],body},
-    layout:"lightHorizontalLines"
-  };
+async function renderCommodityExportCanvas(){
+  const {clone,meta}=buildCommodityExportClone();
+  try{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const canvas=await html2canvas(clone,{backgroundColor:"#f4f7fb",scale:1.35,useCORS:true,logging:false,width:clone.scrollWidth,height:clone.scrollHeight,windowWidth:1500,scrollX:0,scrollY:0});
+    return {canvas,meta};
+  }finally{clone.remove();}
 }
 
 function commodityFlatRows(){
   const rows=[];
-  (state.commodityData?.cities || []).forEach(city=>{
-    (city.lowest||[]).forEach(r=>rows.push([
-      city.code,city.name,"Terendah",r[0],r[1],r[2],round2(r[3])
-    ]));
-    (city.highest||[]).forEach(r=>rows.push([
-      city.code,city.name,"Tertinggi",r[0],r[1],r[2],round2(r[3])
-    ]));
+  (state.commodityData?.cities||[]).forEach(city=>{
+    (city.lowest||[]).forEach(r=>rows.push([city.code,city.name,"Terendah",r[0],r[1],r[2],round2(r[3])]));
+    (city.highest||[]).forEach(r=>rows.push([city.code,city.name,"Tertinggi",r[0],r[1],r[2],round2(r[3])]));
   });
   return rows;
 }
 
 function downloadCommodityCsv(){
-  const rows=commodityFlatRows();
-  const all=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const meta=getDownloadMeta(),rows=commodityFlatRows();
+  const all=[["Jenis Data",meta.source],["Menu",viewTitle()],["Tahun",valueOf("filterYear")],["Bulan",valueOf("filterMonth")],["Flag",valueOf("filterFlag")],["Tanggal Download",meta.dateText],["Jam Download",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
   const csv=all.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n");
-  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const a=document.createElement("a");
-  const url=URL.createObjectURL(blob);
-  a.href=url;
-  a.download=safeName(exportTitle()+"-semua-kabkot")+".csv";
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),500);
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),a=document.createElement("a"),url=URL.createObjectURL(blob);
+  a.href=url;a.download=safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),500);
 }
 
 function downloadCommodityWorkbook(){
-  const rows=commodityFlatRows();
-  if(!rows.length){ alert("Data komoditas belum tersedia."); return; }
-
+  const meta=getDownloadMeta(),rows=commodityFlatRows();
+  if(!rows.length){alert("Data komoditas belum tersedia.");return;}
   const wb=XLSX.utils.book_new();
-
-  // Sheet Ringkasan: seluruh kab/kota sekaligus.
-  const summary=[["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const summary=[["JENIS DATA",meta.source],["MENU",viewTitle()],["TAHUN",valueOf("filterYear")],["BULAN",valueOf("filterMonth")],["FLAG",valueOf("filterFlag")],["TANGGAL DOWNLOAD",meta.dateText],["JAM DOWNLOAD",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),"Semua KabKota");
-
-  // Tambahkan sheet per kab/kota agar lebih mudah dianalisis.
-  (state.commodityData?.cities || []).forEach(city=>{
-    const arr=[
-      [`${city.code} - ${city.name}`],
-      [],
-      ["ANDIL TERENDAH"],
-      ["No","Kode Komoditas","Nama Komoditas","Andil"],
-      ...(city.lowest||[]),
-      [],
-      ["ANDIL TERTINGGI"],
-      ["No","Kode Komoditas","Nama Komoditas","Andil"],
-      ...(city.highest||[])
-    ];
-    const name=String(city.code).substring(0,31);
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(arr),name);
+  (state.commodityData?.cities||[]).forEach(city=>{
+    const arr=[[meta.source],[`Download: ${meta.dateText}, ${meta.timeText}`],[`${city.code} - ${city.name}`],[],["ANDIL TERENDAH"],["No","Kode Komoditas","Nama Komoditas","Andil"],...(city.lowest||[]).map(r=>[r[0],r[1],r[2],round2(r[3])]),[],["ANDIL TERTINGGI"],["No","Kode Komoditas","Nama Komoditas","Andil"],...(city.highest||[]).map(r=>[r[0],r[1],r[2],round2(r[3])])];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(arr),String(city.code).substring(0,31));
   });
-
-  XLSX.writeFile(wb,safeName(exportTitle()+"-semua-kabkot")+".xlsx");
+  XLSX.writeFile(wb,safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".xlsx");
 }
 
-function safeName(v){
-  return String(v||"export").replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();
-}
+function safeName(v){return String(v||"export").replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();}
+function round2(v){const n=Number(v);return Number.isFinite(n)?Math.round((n+Number.EPSILON)*100)/100:v;}
 
-function round2(v){
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : v;
-}
