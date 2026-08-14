@@ -227,7 +227,20 @@
             <input id="comparisonSearchInput" type="search" autocomplete="off" placeholder="Cari wilayah...">
           </label>
         </div>
-<div class="table-wrap">
+<div id="finalHeadlineToolbar" class="comparison-toolbar hidden">
+          <div class="comparison-downloads">
+            <button class="btn" type="button" data-final-export="excel">Excel</button>
+            <button class="btn" type="button" data-final-export="csv">CSV</button>
+            <button class="btn" type="button" data-final-export="pdf">PDF</button>
+            <button class="btn" type="button" data-final-export="image">Image</button>
+          </div>
+          <label class="comparison-search">
+            <span>Cari:</span>
+            <input id="finalHeadlineSearchInput" type="search" autocomplete="off" placeholder="Cari wilayah...">
+          </label>
+        </div>
+
+        <div class="table-wrap">
           <table id="mainTable" class="display nowrap" style="width:100%"></table>
         </div>
       </section>

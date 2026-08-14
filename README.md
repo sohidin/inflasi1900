@@ -190,3 +190,22 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Toolbar Inflasi Asem (Excel/CSV/PDF/Image + Search) menjadi elemen permanen di index.html.
 - JavaScript hanya melakukan show/hide sehingga toolbar tidak hilang saat cleanup DataTables.
 - Event tombol memakai `.onclick` agar tidak menumpuk setelah pindah menu berulang kali.
+
+
+## V10.11
+- Inflasi Final memakai desain tabel native yang mengikuti Inflasi Asem.
+- Header dua tingkat dan warna biru lembut.
+- MtM/YtD/YoY serta angka di bawahnya dikunci center dengan colgroup.
+- Toolbar Excel/CSV/PDF/Image + Search dibuat konsisten.
+- PDF/Image mengambil tampilan web tabel Inflasi Final.
+
+
+## V10.12
+- Inflasi Final mempertahankan desain native elegan yang sama dengan Inflasi Asem.
+- Pada Inflasi Final, setiap kolom MtM/YtD/YoY dibandingkan antarwilayah:
+  - tertinggi = highlight merah,
+  - terendah = highlight hijau.
+- Pada Inflasi Asem vs Angka Final, aturan yang sama diterapkan terpisah untuk 6 kolom:
+  - Final MtM/YtD/YoY,
+  - Sementara MtM/YtD/YoY.
+- Jika seluruh nilai dalam satu kolom sama, kolom tidak diberi highlight agar tidak seluruhnya berwarna.

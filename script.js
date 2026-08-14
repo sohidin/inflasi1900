@@ -15,6 +15,7 @@ const state = {
   updatedAtCache: null,
   finalFilterCache: null,
   comparisonData: null,
+  finalHeadlineData: null,
   pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 };
 
@@ -313,7 +314,8 @@ async function loadCurrentView(){
     }else if(state.view === "headline"){
       r = await cachedApi("headline",{action:"headline", ...args},300000);
       state.comparisonData=null;
-      renderStandard(r);
+      state.finalHeadlineData=r;
+      renderFinalHeadlineTable(r);
     }else if(state.view === "komoditas"){
       r = await cachedApi("commodity",{action:"commodity", ...args,mode:valueOf("commodityMode")},300000);
       renderCommodity(r);
@@ -361,6 +363,13 @@ function cleanupStandardTableUi(){
     if(q) q.value="";
   }
 
+  const finalToolbar=document.getElementById("finalHeadlineToolbar");
+  if(finalToolbar){
+    finalToolbar.classList.add("hidden");
+    const fq=finalToolbar.querySelector("#finalHeadlineSearchInput");
+    if(fq) fq.value="";
+  }
+
   // Destroy DataTables instance aktif bila masih ada.
   try{
     if(state.mainDt){
@@ -395,6 +404,249 @@ function cleanupStandardTableUi(){
   }
 }
 
+
+
+function getColumnExtremes(rows,startIndex,count){
+  const out=[];
+  for(let j=0;j<count;j++){
+    const vals=(rows||[])
+      .map(row=>Number(row[startIndex+j]))
+      .filter(v=>Number.isFinite(v));
+
+    if(!vals.length){
+      out.push({min:null,max:null,same:true});
+      continue;
+    }
+
+    const min=Math.min(...vals);
+    const max=Math.max(...vals);
+    out.push({min,max,same:min===max});
+  }
+  return out;
+}
+
+function formatHighlightedMetric(v,extreme){
+  if(v===null||v===undefined||v==="") return "";
+  const n=Number(v);
+  if(!Number.isFinite(n)) return escapeHtml(v);
+
+  let rankClass="";
+  if(extreme && !extreme.same){
+    if(n===extreme.max) rankClass="metric-high";
+    else if(n===extreme.min) rankClass="metric-low";
+  }
+
+  return `<span class="metric-value ${rankClass}">${
+    n.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})
+  }</span>`;
+}
+
+function renderFinalHeadlineTable(r){
+  document.getElementById("standardTableSection").classList.remove("hidden");
+  document.getElementById("commoditySection").classList.add("hidden");
+  cleanupStandardTableUi();
+
+  document.getElementById("tableTitle").textContent="Inflasi Final";
+  document.getElementById("tableInfo").textContent=
+    `Angka Final • Tahun ${valueOf("filterYear")} • Bulan ${valueOf("filterMonth")}`;
+
+  const table=document.getElementById("mainTable");
+  table.className="final-native-table";
+
+  const finalExtremes=getColumnExtremes(r.rows||[],2,3);
+
+  table.innerHTML=`
+    <colgroup>
+      <col class="final-col-code">
+      <col class="final-col-name">
+      <col class="final-col-num">
+      <col class="final-col-num">
+      <col class="final-col-num">
+    </colgroup>
+    <thead>
+      <tr class="final-group-row">
+        <th rowspan="2" class="final-id">Kode Kota</th>
+        <th rowspan="2" class="final-id">Nama Kota</th>
+        <th colspan="3" class="final-group">
+          <strong>ANGKA FINAL</strong>
+          <span>Tahun ${escapeHtml(valueOf("filterYear"))} • Bulan ${escapeHtml(valueOf("filterMonth"))}</span>
+        </th>
+      </tr>
+      <tr class="final-metric-row">
+        <th>MtM</th>
+        <th>YtD</th>
+        <th>YoY</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(r.rows||[]).map(row=>`
+        <tr>
+          <td class="final-code">${escapeHtml(row[0])}</td>
+          <td class="final-name">${escapeHtml(row[1])}</td>
+          <td class="final-num">${formatHighlightedMetric(row[2],finalExtremes[0])}</td>
+          <td class="final-num">${formatHighlightedMetric(row[3],finalExtremes[1])}</td>
+          <td class="final-num">${formatHighlightedMetric(row[4],finalExtremes[2])}</td>
+        </tr>`).join("")}
+    </tbody>`;
+
+  const toolbar=document.getElementById("finalHeadlineToolbar");
+  toolbar.classList.remove("hidden");
+
+  const searchInput=document.getElementById("finalHeadlineSearchInput");
+  searchInput.value="";
+  searchInput.oninput=e=>{
+    const q=String(e.target.value||"").trim().toLowerCase();
+    table.querySelectorAll("tbody tr").forEach(tr=>{
+      tr.style.display=!q||tr.textContent.toLowerCase().includes(q)?"":"none";
+    });
+  };
+
+  toolbar.querySelector('[data-final-export="pdf"]').onclick=downloadFinalHeadlinePdf;
+  toolbar.querySelector('[data-final-export="image"]').onclick=downloadFinalHeadlineImage;
+  toolbar.querySelector('[data-final-export="csv"]').onclick=downloadFinalHeadlineCsv;
+  toolbar.querySelector('[data-final-export="excel"]').onclick=downloadFinalHeadlineExcel;
+}
+
+function finalHeadlineRowsForExport(){
+  const r=state.finalHeadlineData;
+  if(!r) return [];
+  return (r.rows||[]).map(row=>[
+    row[0],row[1],
+    round2(row[2]),round2(row[3]),round2(row[4])
+  ]);
+}
+
+function downloadFinalHeadlineCsv(){
+  const meta=getDownloadMeta();
+  const rows=[
+    ["Jenis Data","Angka Final"],
+    ["Tahun",valueOf("filterYear")],
+    ["Bulan",valueOf("filterMonth")],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    ["Kode Kota","Nama Kota","Inflasi MtM","Inflasi YtD","Inflasi YoY"],
+    ...finalHeadlineRowsForExport()
+  ];
+  const csv=rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=safeName(`Angka Final-Inflasi-${meta.fileStamp}`)+".csv";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+
+function downloadFinalHeadlineExcel(){
+  const meta=getDownloadMeta();
+  const rows=[
+    ["ANGKA FINAL - INFLASI"],
+    ["Tahun",valueOf("filterYear")],
+    ["Bulan",valueOf("filterMonth")],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    ["Kode Kota","Nama Kota","Inflasi MtM","Inflasi YtD","Inflasi YoY"],
+    ...finalHeadlineRowsForExport()
+  ];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Inflasi Final");
+  XLSX.writeFile(wb,safeName(`Angka Final-Inflasi-${meta.fileStamp}`)+".xlsx");
+}
+
+async function finalHeadlineExportCanvas(){
+  const section=document.getElementById("standardTableSection");
+  const clone=section.cloneNode(true);
+  const meta=getDownloadMeta();
+
+  clone.id="finalHeadlineExportClone";
+  clone.classList.add("visual-export-clone");
+  clone.style.position="fixed";
+  clone.style.left="-20000px";
+  clone.style.top="0";
+  clone.style.width="1250px";
+  clone.style.maxWidth="1250px";
+  clone.style.height="auto";
+  clone.style.overflow="visible";
+  clone.style.background="#fff";
+  clone.style.padding="22px";
+
+  clone.querySelector("#finalHeadlineToolbar")?.remove();
+  clone.querySelector("#comparisonToolbar")?.remove();
+
+  const originalRows=[...section.querySelectorAll(".final-native-table tbody tr")];
+  const clonedRows=[...clone.querySelectorAll(".final-native-table tbody tr")];
+  originalRows.forEach((row,i)=>{
+    if(clonedRows[i]) clonedRows[i].style.display=row.style.display;
+  });
+
+  const header=document.createElement("div");
+  header.className="standard-export-header";
+  header.innerHTML=`
+    <div class="export-brand-badge">IF</div>
+    <div class="standard-export-copy">
+      <div class="export-kicker">DASHBOARD MONITORING INFLASI</div>
+      <div class="export-main-title">Inflasi Final</div>
+      <div class="export-subtitle">
+        Angka Final • Tahun ${escapeHtml(valueOf("filterYear"))} • Bulan ${escapeHtml(valueOf("filterMonth"))}
+      </div>
+    </div>
+    <div class="export-time-box">
+      <span>Waktu Download</span>
+      <strong>${escapeHtml(meta.dateText)}</strong>
+      <strong>${escapeHtml(meta.timeText)}</strong>
+    </div>`;
+  clone.insertBefore(header,clone.firstChild);
+
+  document.body.appendChild(clone);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+  try{
+    const canvas=await html2canvas(clone,{
+      backgroundColor:"#ffffff",
+      scale:1.25,
+      useCORS:true,
+      logging:false,
+      width:clone.scrollWidth,
+      height:clone.scrollHeight,
+      windowWidth:1350,
+      windowHeight:clone.scrollHeight+100
+    });
+    return {canvas,meta};
+  }finally{
+    clone.remove();
+  }
+}
+
+async function downloadFinalHeadlineImage(){
+  const {canvas,meta}=await finalHeadlineExportCanvas();
+  const a=document.createElement("a");
+  a.download=safeName(`Angka Final-Inflasi-${meta.fileStamp}`)+".png";
+  a.href=canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadFinalHeadlinePdf(){
+  const {canvas,meta}=await finalHeadlineExportCanvas();
+  const pageW=841.89,pageH=595.28,margin=18;
+  const usableW=pageW-margin*2,usableH=pageH-margin*2;
+  let width=usableW;
+  let height=width*(canvas.height/canvas.width);
+  if(height>usableH){
+    const scale=usableH/height;
+    height*=scale;
+    width*=scale;
+  }
+  pdfMake.createPdf({
+    pageSize:"A4",
+    pageOrientation:"landscape",
+    pageMargins:[margin,margin,margin,margin],
+    content:[{image:canvas.toDataURL("image/png"),width,alignment:"center"}],
+    info:{title:"Inflasi Final"}
+  }).download(safeName(`Angka Final-Inflasi-${meta.fileStamp}`)+".pdf");
+}
+
 function renderComparisonTable(r){
   document.getElementById("standardTableSection").classList.remove("hidden");
   document.getElementById("commoditySection").classList.add("hidden");
@@ -407,6 +659,11 @@ function renderComparisonTable(r){
 
   const table=document.getElementById("mainTable");
   table.className="comparison-native-table";
+
+  // 6 kolom metrik dibandingkan secara vertikal:
+  // Final MtM/YtD/YoY dan Sementara MtM/YtD/YoY.
+  const comparisonExtremes=getColumnExtremes(r.rows||[],2,6);
+
   table.innerHTML=`
     <thead>
       <tr class="cmp-group-row">
@@ -437,7 +694,7 @@ function renderComparisonTable(r){
           <td class="cmp-name">${escapeHtml(row[1])}</td>
           ${row.slice(2).map((v,idx)=>`
             <td class="cmp-num ${idx===3?"cmp-split":""}">
-              ${formatComparisonNumber(v)}
+              ${formatHighlightedMetric(v,comparisonExtremes[idx])}
             </td>`).join("")}
         </tr>`).join("")}
     </tbody>`;
@@ -615,6 +872,7 @@ async function downloadComparisonVisualPdf(){
 
 function renderStandard(r){
   document.getElementById("comparisonToolbar")?.classList.add("hidden");
+  document.getElementById("finalHeadlineToolbar")?.classList.add("hidden");
   document.getElementById("standardTableSection").classList.remove("hidden");
   document.getElementById("commoditySection").classList.add("hidden");
   cleanupStandardTableUi();
@@ -725,6 +983,7 @@ function renderStandard(r){
 }
 function renderCommodity(r){
   document.getElementById("comparisonToolbar")?.classList.add("hidden");
+  document.getElementById("finalHeadlineToolbar")?.classList.add("hidden");
   cleanupStandardTableUi();
   state.commodityData = r;
   document.getElementById("standardTableSection").classList.add("hidden");

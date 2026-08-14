@@ -916,3 +916,203 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   #comparisonToolbar .comparison-search{width:100%!important;margin-left:0!important}
   #comparisonToolbar #comparisonSearchInput{flex:1!important;width:auto!important}
 }
+
+
+/* ===== V10.11 Inflasi Final = visual Inflasi Asem ===== */
+#finalHeadlineToolbar.hidden{display:none!important}
+#finalHeadlineToolbar:not(.hidden){
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:14px!important;
+  margin:10px 0 14px!important;
+}
+#finalHeadlineToolbar .comparison-downloads{
+  display:flex!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+}
+#finalHeadlineToolbar .comparison-search{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin-left:auto!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  color:#49667b!important;
+}
+#finalHeadlineToolbar #finalHeadlineSearchInput{
+  width:230px!important;
+  height:38px!important;
+  border:1px solid #d7e4ed!important;
+  border-radius:10px!important;
+  padding:0 10px!important;
+  background:#fff!important;
+}
+
+.final-native-table{
+  width:100%!important;
+  border-collapse:separate!important;
+  border-spacing:0!important;
+  table-layout:fixed!important;
+  overflow:hidden!important;
+  border:1px solid #dbe7ef!important;
+  border-radius:14px!important;
+  font-size:12px!important;
+}
+.final-native-table col.final-col-code{width:18%!important}
+.final-native-table col.final-col-name{width:37%!important}
+.final-native-table col.final-col-num{width:15%!important}
+
+.final-native-table th,
+.final-native-table td{box-sizing:border-box!important}
+
+.final-native-table .final-group-row th{
+  text-align:center!important;
+  vertical-align:middle!important;
+  padding:11px 8px 10px!important;
+}
+.final-native-table .final-id{
+  background:#eef5fa!important;
+  color:#2f536b!important;
+  font-weight:800!important;
+  border-bottom:1px solid #cadce7!important;
+}
+.final-native-table .final-group{
+  background:linear-gradient(180deg,#e4eef7,#d8e8f3)!important;
+  color:#215878!important;
+  border-left:2px solid #c4d9e7!important;
+}
+.final-native-table .final-group strong{
+  display:block!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  letter-spacing:.06em!important;
+}
+.final-native-table .final-group span{
+  display:block!important;
+  margin-top:4px!important;
+  font-size:10px!important;
+  font-weight:700!important;
+  opacity:.85!important;
+}
+
+.final-native-table .final-metric-row th{
+  text-align:center!important;
+  vertical-align:middle!important;
+  padding:9px 6px!important;
+  color:#31566f!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  border-bottom:2px solid #cadbe6!important;
+  background:#edf4f9!important;
+}
+.final-native-table .final-metric-row th:first-child{
+  border-left:2px solid #c4d9e7!important;
+}
+
+.final-native-table tbody td{
+  padding:10px 10px!important;
+  border-bottom:1px solid #e5edf3!important;
+  background:#fff!important;
+  vertical-align:middle!important;
+}
+.final-native-table tbody tr:nth-child(even) td{background:#fafcfd!important}
+.final-native-table tbody tr:hover td{background:#f1f7fb!important}
+.final-native-table tbody tr:last-child td{border-bottom:0!important}
+
+.final-native-table .final-code{
+  text-align:center!important;
+  font-weight:700!important;
+  color:#39566a!important;
+}
+.final-native-table .final-name{
+  text-align:left!important;
+  font-weight:600!important;
+  color:#30485b!important;
+}
+.final-native-table .final-num{
+  text-align:center!important;
+  font-variant-numeric:tabular-nums!important;
+  font-weight:700!important;
+  white-space:nowrap!important;
+}
+.final-native-table tbody td:nth-child(3){
+  border-left:2px solid #c4d9e7!important;
+}
+
+/* angka selalu tepat center di bawah MtM/YtD/YoY */
+.final-native-table .final-num .positive,
+.final-native-table .final-num .negative,
+.final-native-table .final-num > span{
+  display:inline-flex!important;
+  min-width:58px!important;
+  justify-content:center!important;
+  align-items:center!important;
+  text-align:center!important;
+}
+
+#finalHeadlineExportClone .final-native-table{
+  width:100%!important;
+  table-layout:fixed!important;
+}
+
+@media(max-width:900px){
+  #finalHeadlineToolbar:not(.hidden){
+    align-items:stretch!important;
+    flex-direction:column!important;
+  }
+  #finalHeadlineToolbar .comparison-search{
+    width:100%!important;
+    margin-left:0!important;
+  }
+  #finalHeadlineToolbar #finalHeadlineSearchInput{
+    flex:1!important;
+    width:auto!important;
+  }
+}
+
+
+/* ===== V10.12: highlight tertinggi/terendah per kolom ===== */
+.metric-value{
+  display:inline-flex!important;
+  min-width:58px!important;
+  min-height:28px!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:5px 9px!important;
+  border-radius:9px!important;
+  font-variant-numeric:tabular-nums!important;
+  font-weight:750!important;
+  line-height:1!important;
+  color:#2f485b!important;
+}
+
+/* Nilai tertinggi pada masing-masing kolom */
+.metric-value.metric-high{
+  background:#fff0ef!important;
+  color:#d33a2f!important;
+  box-shadow:inset 0 0 0 1px rgba(211,58,47,.10)!important;
+  font-weight:800!important;
+}
+
+/* Nilai terendah pada masing-masing kolom */
+.metric-value.metric-low{
+  background:#e9f8f1!important;
+  color:#07814e!important;
+  box-shadow:inset 0 0 0 1px rgba(7,129,78,.10)!important;
+  font-weight:800!important;
+}
+
+/* Pastikan highlight tetap center tepat di bawah MtM/YtD/YoY */
+.comparison-native-table .cmp-num,
+.final-native-table .final-num{
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+
+/* Nilai biasa tidak lagi mengikuti warna tanda +/- pada dua tabel inflasi utama */
+.comparison-native-table .cmp-num .metric-value:not(.metric-high):not(.metric-low),
+.final-native-table .final-num .metric-value:not(.metric-high):not(.metric-low){
+  color:#2f485b!important;
+}
