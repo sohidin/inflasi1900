@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbzUtpImwSnQUWaEe_LgbPo2rj31TUwT0_l0rrlQDFcVGnahyx4iU9GxUPTKIzxu7w7i/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
 };
 
 const state = {
