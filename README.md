@@ -112,3 +112,16 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 - Highlight inflasi tertinggi merah, terendah hijau per komoditas.
 - Plus Jakarta Sans dan layout tabel lebih modern.
 - Cache browser + period index backend untuk mempercepat pindah menu/filter.
+
+
+## V10
+- Menggunakan `index.html` hasil update manual user sebagai basis.
+- Inflasi Asem disandingkan dengan Inflasi Final:
+  - Final MtM / YtD / YoY
+  - Sementara MtM / YtD / YoY
+- Tahun dan bulan Final pembanding dapat dipilih sendiri.
+- Default pembanding Final diarahkan ke bulan sebelumnya bila tersedia.
+- Kode provinsi Final 1900 disamakan dengan kode provinsi Asem 19.
+- PDF dan Image untuk menu standar dibuat dari tampilan web/card.
+- Saat download, seluruh baris tabel dimunculkan sementara agar hasil tidak hanya halaman pertama.
+- Header download memuat jenis data, data-per (untuk Asem), serta tanggal/jam download.

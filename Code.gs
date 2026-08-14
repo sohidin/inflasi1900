@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v9"
+  CACHE_VERSION: "v10"
 };
 
 function doGet(e) {
@@ -26,6 +26,7 @@ function doGet(e) {
     else if (action === "filters") result = getFilters_(p.source);
     else if (action === "table") result = getPivotTable_(p);
     else if (action === "headline") result = getHeadline_(p);
+    else if (action === "headlineCompare") result = getHeadlineCompare_(p);
     else if (action === "commodity") result = getCommodity_(p);
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
@@ -280,6 +281,89 @@ function getHeadline_(p) {
     info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month,
     columns:["Kode Kota","Nama Kota","Inflasi MtM","Inflasi YtD","Inflasi YoY"],
     rows:resultRows
+  };
+
+  cacheSmall_(key,result);
+  return result;
+}
+
+
+function getHeadlineCompare_(p) {
+  const asemYear=String(p.asemYear||"");
+  const asemMonth=String(p.asemMonth||"");
+  const finalYear=String(p.finalYear||"");
+  const finalMonth=String(p.finalMonth||"");
+
+  if(!asemYear||!asemMonth||!finalYear||!finalMonth){
+    throw new Error("Periode angka sementara dan periode final pembanding harus dipilih.");
+  }
+
+  const key=[
+    CONFIG.CACHE_VERSION,"headlineCompare",
+    asemYear,asemMonth,finalYear,finalMonth
+  ].join(":");
+
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
+
+  const asem=getHeadline_({source:"asem",year:asemYear,month:asemMonth});
+  const fin=getHeadline_({source:"final",year:finalYear,month:finalMonth});
+
+  function normCode_(code){
+    code=clean_(code);
+    return (code==="1900"||code==="19") ? "19" : code;
+  }
+
+  const map={};
+
+  (fin.rows||[]).forEach(r=>{
+    const k=normCode_(r[0]);
+    if(!map[k]) map[k]={};
+    map[k].code=k;
+    map[k].finalName=r[1];
+    map[k].final=[r[2],r[3],r[4]];
+  });
+
+  (asem.rows||[]).forEach(r=>{
+    const k=normCode_(r[0]);
+    if(!map[k]) map[k]={};
+    map[k].code=k;
+    map[k].asemName=r[1];
+    map[k].asem=[r[2],r[3],r[4]];
+  });
+
+  const preferred=["1902","1903","1906","1971","19"];
+  const keys=preferred.filter(k=>map[k]);
+  Object.keys(map)
+    .filter(k=>preferred.indexOf(k)===-1)
+    .sort(numericSort_)
+    .forEach(k=>keys.push(k));
+
+  const rows=keys.map(k=>{
+    const x=map[k];
+    const f=x.final||[null,null,null];
+    const a=x.asem||[null,null,null];
+    return [
+      x.code,
+      x.asemName||x.finalName||"",
+      f[0],f[1],f[2],
+      a[0],a[1],a[2]
+    ];
+  });
+
+  const result={
+    title:"Inflasi Asem vs Inflasi Final",
+    info:"Final "+finalYear+"-"+finalMonth+
+      " • dibandingkan dengan Angka Sementara "+asemYear+"-"+asemMonth,
+    finalPeriod:{year:finalYear,month:finalMonth},
+    asemPeriod:{year:asemYear,month:asemMonth},
+    columns:[
+      "Kode Kota","Nama Kota",
+      "Final MtM","Final YtD","Final YoY",
+      "Sementara MtM","Sementara YtD","Sementara YoY"
+    ],
+    rows:rows
   };
 
   cacheSmall_(key,result);

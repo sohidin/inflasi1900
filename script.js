@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
+  API_URL: "https://script.google.com/macros/s/AKfycbzUtpImwSnQUWaEe_LgbPo2rj31TUwT0_l0rrlQDFcVGnahyx4iU9GxUPTKIzxu7w7i/exec"
 };
 
 const state = {
@@ -13,6 +13,8 @@ const state = {
   filterCache: {},
   responseCache: new Map(),
   updatedAtCache: null,
+  finalFilterCache: null,
+  comparisonData: null,
 };
 
 const Api = {
@@ -132,8 +134,14 @@ function bindAccordion(){
   });
 }
 function bindAppEvents(){
-  document.getElementById("applyFilterBtn").addEventListener("click", loadCurrentView);
+  document.getElementById("applyFilterBtn").addEventListener("click", async ()=>{
+    if(state.source==="asem" && state.view==="headline"){
+      await ensureFinalComparisonFilters();
+    }
+    await loadCurrentView();
+  });
   document.getElementById("filterYear").addEventListener("change", updateMonths);
+  document.getElementById("compareFinalYear")?.addEventListener("change", updateCompareFinalMonths);
   document.getElementById("logoutBtn").addEventListener("click", () => {
     sessionStorage.clear();
     showLogin();
@@ -192,6 +200,70 @@ function fillSelect(id, items){
 }
 function valueOf(id){ return document.getElementById(id)?.value || ""; }
 
+
+async function ensureFinalComparisonFilters(){
+  if(state.finalFilterCache){
+    hydrateFinalComparisonFilters();
+    return;
+  }
+
+  state.finalFilterCache=await cachedApi(
+    "filters",
+    {action:"filters",source:"final"},
+    10*60*1000
+  );
+  hydrateFinalComparisonFilters();
+}
+
+function hydrateFinalComparisonFilters(){
+  const f=state.finalFilterCache;
+  if(!f) return;
+
+  const yearEl=document.getElementById("compareFinalYear");
+  const monthEl=document.getElementById("compareFinalMonth");
+  if(!yearEl||!monthEl) return;
+
+  const oldYear=yearEl.value;
+  const oldMonth=monthEl.value;
+
+  fillSelect("compareFinalYear",f.years);
+
+  const asemYear=Number(valueOf("filterYear"));
+  const asemMonth=Number(valueOf("filterMonth"));
+  let defaultYear=asemYear;
+  let defaultMonth=asemMonth-1;
+  if(defaultMonth<1){ defaultMonth=12; defaultYear=asemYear-1; }
+
+  if(oldYear && [...yearEl.options].some(o=>o.value===oldYear)){
+    yearEl.value=oldYear;
+  }else if([...yearEl.options].some(o=>o.value===String(defaultYear))){
+    yearEl.value=String(defaultYear);
+  }
+
+  updateCompareFinalMonths();
+
+  if(oldMonth && [...monthEl.options].some(o=>o.value===oldMonth)){
+    monthEl.value=oldMonth;
+  }else if([...monthEl.options].some(o=>o.value===String(defaultMonth))){
+    monthEl.value=String(defaultMonth);
+  }
+}
+
+function updateCompareFinalMonths(){
+  const f=state.finalFilterCache;
+  if(!f) return;
+
+  const year=valueOf("compareFinalYear");
+  const months=f.monthsByYear[String(year)]||[];
+  const old=valueOf("compareFinalMonth");
+
+  fillSelect("compareFinalMonth",months);
+
+  if(old && [...document.getElementById("compareFinalMonth").options].some(o=>o.value===old)){
+    document.getElementById("compareFinalMonth").value=old;
+  }
+}
+
 async function loadCurrentView(){
   updateUI();
   showLoading(true);
@@ -207,8 +279,20 @@ async function loadCurrentView(){
 
   try{
     let r;
-    if(state.view === "headline"){
+    if(state.view === "headline" && state.source === "asem"){
+      await ensureFinalComparisonFilters();
+      r = await cachedApi("headlineCompare",{
+        action:"headlineCompare",
+        asemYear:valueOf("filterYear"),
+        asemMonth:valueOf("filterMonth"),
+        finalYear:valueOf("compareFinalYear"),
+        finalMonth:valueOf("compareFinalMonth")
+      },300000);
+      state.comparisonData=r;
+      renderStandard(r);
+    }else if(state.view === "headline"){
       r = await cachedApi("headline",{action:"headline", ...args},300000);
+      state.comparisonData=null;
       renderStandard(r);
     }else if(state.view === "komoditas"){
       r = await cachedApi("commodity",{action:"commodity", ...args,mode:valueOf("commodityMode")},300000);
@@ -229,6 +313,10 @@ function updateUI(){
 
   const commodity = state.view === "komoditas";
   document.querySelectorAll(".komoditas-only").forEach(x => x.style.display = commodity ? "" : "none");
+
+  const asemHeadline=state.source==="asem" && state.view==="headline";
+  document.getElementById("headlineCompareFilters")?.classList.toggle("hidden",!asemHeadline);
+  document.getElementById("comparisonGroupHeader")?.classList.toggle("hidden",!asemHeadline);
 
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
   document.getElementById("statYear").textContent = valueOf("filterYear") || "-";
@@ -255,6 +343,13 @@ function renderStandard(r){
   document.getElementById("tableTitle").textContent = r.title || viewTitle();
   document.getElementById("tableInfo").textContent = r.info || "";
 
+  if(state.source==="asem" && state.view==="headline" && r.finalPeriod && r.asemPeriod){
+    document.getElementById("comparisonFinalLabel").textContent =
+      `Tahun ${r.finalPeriod.year} • Bulan ${r.finalPeriod.month}`;
+    document.getElementById("comparisonAsemLabel").textContent =
+      `Tahun ${r.asemPeriod.year} • Bulan ${r.asemPeriod.month}`;
+  }
+
   state.mainDt = $("#mainTable").DataTable({
     data:r.rows,
     columns:r.columns.map((c,i)=>({data:i,title:formatColumnTitle(c,i),render:(data,type,row,meta)=>renderCell(data,type,row,meta),className:i>=2?"num-cell":""})),
@@ -263,8 +358,8 @@ function renderStandard(r){
     buttons:[
       {extend:"excelHtml5",title:exportTitle()},
       {extend:"csvHtml5",title:exportTitle()},
-      {extend:"pdfHtml5",title:exportTitle(),orientation:"landscape",pageSize:"A4"},
-      {text:"Image",action:()=>exportImage("standardTableSection")}
+      {text:"PDF",action:()=>downloadStandardVisualPdf()},
+      {text:"Image",action:()=>downloadStandardVisualImage()}
     ],
     language:{search:"Cari:",info:"_START_–_END_ dari _TOTAL_",zeroRecords:"Data tidak ditemukan",paginate:{next:"Berikut",previous:"Sebelum"}}
   });
@@ -349,9 +444,21 @@ function applyCommodityGlobalSearch(){
 
 function formatColumnTitle(label,index){
   const text=String(label??"");
-  if(index<2)return escapeHtml(text);
+
+  if(state.source==="asem" && state.view==="headline"){
+    const map={
+      "Final MtM":"MtM","Final YtD":"YtD","Final YoY":"YoY",
+      "Sementara MtM":"MtM","Sementara YtD":"YtD","Sementara YoY":"YoY"
+    };
+    if(map[text]) return `<span class="metric-head">${map[text]}</span>`;
+    return escapeHtml(text);
+  }
+
+  if(index<2) return escapeHtml(text);
+
   const m=text.match(/^(\d+)\s*-\s*(.+)$/);
-  if(!m)return escapeHtml(text);
+  if(!m) return escapeHtml(text);
+
   return `<span class="city-head-code">${escapeHtml(m[1])}</span><span class="city-head-name">${escapeHtml(m[2])}</span>`;
 }
 function renderCell(data,type,row,meta){
@@ -429,6 +536,179 @@ async function downloadCommodityPagePdf(){
   pdfMake.createPdf({pageSize:"A4",pageOrientation:"landscape",pageMargins:[marginPt,marginPt,marginPt,marginPt],content,
     info:{title:`${meta.source} - ${viewTitle()}`,subject:`Download ${meta.dateText} ${meta.timeText}`}
   }).download(safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".pdf");
+}
+
+
+function buildStandardExportClone(){
+  const source=document.getElementById("standardTableSection");
+  const clone=source.cloneNode(true);
+  const meta=getDownloadMeta();
+
+  clone.id="standardExportClone";
+  clone.style.position="fixed";
+  clone.style.left="-20000px";
+  clone.style.top="0";
+  clone.style.width="1500px";
+  clone.style.maxWidth="1500px";
+  clone.style.height="auto";
+  clone.style.overflow="visible";
+  clone.style.background="#fff";
+  clone.style.padding="22px";
+
+  clone.querySelectorAll(
+    ".dt-buttons,.dataTables_filter,.dataTables_paginate,.dataTables_info,.dataTables_length"
+  ).forEach(x=>x.remove());
+
+  clone.querySelectorAll(
+    ".table-wrap,.dataTables_scroll,.dataTables_scrollBody,.dataTables_scrollHead"
+  ).forEach(x=>{
+    x.style.overflow="visible";
+    x.style.maxHeight="none";
+    x.style.height="auto";
+    x.style.width="100%";
+  });
+
+  const report=document.createElement("div");
+  report.className="standard-export-header";
+
+  const dataPer=meta.source==="Angka Sementara" && meta.sourcePeriod
+    ? ` • Data per ${escapeHtml(meta.sourcePeriod)}`
+    : "";
+
+  let compareText="";
+  if(state.source==="asem" && state.view==="headline"){
+    compareText=`
+      <div class="standard-export-compare">
+        <span>Final: ${escapeHtml(valueOf("compareFinalYear"))}/${escapeHtml(valueOf("compareFinalMonth"))}</span>
+        <span>Sementara: ${escapeHtml(valueOf("filterYear"))}/${escapeHtml(valueOf("filterMonth"))}</span>
+      </div>`;
+  }
+
+  report.innerHTML=`
+    <div class="export-brand-badge">IF</div>
+    <div class="standard-export-copy">
+      <div class="export-kicker">DASHBOARD MONITORING INFLASI</div>
+      <div class="export-main-title">${escapeHtml(viewTitle())}</div>
+      <div class="export-subtitle">${escapeHtml(meta.source)}${dataPer}</div>
+      ${compareText}
+    </div>
+    <div class="export-time-box">
+      <span>Waktu Download</span>
+      <strong>${escapeHtml(meta.dateText)}</strong>
+      <strong>${escapeHtml(meta.timeText)}</strong>
+    </div>`;
+  clone.insertBefore(report,clone.firstChild);
+
+  if(state.source==="asem" && state.view==="headline"){
+    const group=document.getElementById("comparisonGroupHeader");
+    if(group && !group.classList.contains("hidden")){
+      const copied=group.cloneNode(true);
+      copied.classList.remove("hidden");
+      const tableWrap=clone.querySelector(".table-wrap");
+      if(tableWrap) tableWrap.parentNode.insertBefore(copied,tableWrap);
+    }
+  }
+
+  document.body.appendChild(clone);
+  return {clone,meta};
+}
+
+async function renderStandardExportCanvas(){
+  const previousLen=state.mainDt ? state.mainDt.page.len() : null;
+  const previousPage=state.mainDt ? state.mainDt.page() : 0;
+
+  try{
+    if(state.mainDt){
+      state.mainDt.page.len(-1).draw(false);
+      await new Promise(r=>setTimeout(r,100));
+    }
+
+    const {clone,meta}=buildStandardExportClone();
+    try{
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+      const width=Math.ceil(clone.scrollWidth);
+      const height=Math.ceil(clone.scrollHeight);
+
+      const canvas=await html2canvas(clone,{
+        backgroundColor:"#ffffff",
+        scale:1.15,
+        useCORS:true,
+        logging:false,
+        width,
+        height,
+        windowWidth:width+100,
+        windowHeight:height+100,
+        scrollX:0,
+        scrollY:0
+      });
+
+      return {canvas,meta};
+    }finally{
+      clone.remove();
+    }
+  }finally{
+    if(state.mainDt && previousLen!==null){
+      state.mainDt.page.len(previousLen).draw(false);
+      state.mainDt.page(previousPage).draw(false);
+    }
+  }
+}
+
+async function downloadStandardVisualImage(){
+  const {canvas,meta}=await renderStandardExportCanvas();
+  const a=document.createElement("a");
+  a.download=safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".png";
+  a.href=canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadStandardVisualPdf(){
+  const {canvas,meta}=await renderStandardExportCanvas();
+
+  const pageW=841.89;
+  const pageH=595.28;
+  const margin=18;
+  const usableW=pageW-margin*2;
+  const usableH=pageH-margin*2;
+  const pxPerPt=canvas.width/usableW;
+  const slicePx=Math.max(1,Math.floor(usableH*pxPerPt));
+
+  const content=[];
+  let y=0;
+
+  while(y<canvas.height){
+    const h=Math.min(slicePx,canvas.height-y);
+    const slice=document.createElement("canvas");
+    slice.width=canvas.width;
+    slice.height=h;
+
+    const ctx=slice.getContext("2d");
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(0,0,slice.width,slice.height);
+    ctx.drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+
+    if(content.length) content.push({text:"",pageBreak:"before"});
+    content.push({
+      image:slice.toDataURL("image/png"),
+      width:usableW
+    });
+
+    y+=h;
+  }
+
+  pdfMake.createPdf({
+    pageSize:"A4",
+    pageOrientation:"landscape",
+    pageMargins:[margin,margin,margin,margin],
+    content,
+    info:{
+      title:`${meta.source} - ${viewTitle()}`,
+      subject:`Download ${meta.dateText} ${meta.timeText}`
+    }
+  }).download(
+    safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".pdf"
+  );
 }
 
 function getDownloadMeta(){

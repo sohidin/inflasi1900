@@ -24,7 +24,7 @@
       <div class="login-copy">
         <span class="eyebrow">SISTEM MONITORING</span>
         <h1>Dashboard Inflasi 1900</h1>
-        <p>Angka sementara dan angka final inflasi dalam satu dashboard.</p>
+        <p>Angka Sementara dan Angka Final Inflasi Dalam Satu Dashboard.</p>
       </div>
 
       <form id="loginForm">
@@ -46,13 +46,13 @@
       <div class="brand">
         <div class="brand-icon">IF</div>
         <div>
-          <strong>Monitoring Inflasi</strong>
-          <span>Rekap dan Analisis</span>
+          <strong>Inflasi</strong>
+          <span>Provinsi Babel</span>
         </div>
       </div>
 
       <div class="menu-root">
-        <div class="menu-caption">DATA INFLASI</div>
+        <div class="menu-caption">DATA SEMENTARA</div>
         <button class="menu-main" data-menu="asem">
           <span class="menu-label"><span class="menu-icon">◫</span>Angka Sementara</span>
           <span class="chevron">⌄</span>
@@ -170,6 +170,23 @@
           <label>Flag</label>
           <select id="filterFlag"></select>
         </div>
+
+        <div id="headlineCompareFilters" class="compare-filter-group hidden">
+          <div class="compare-filter-title">
+            <span class="compare-dot final-dot"></span>
+            Pembanding Angka Final
+          </div>
+          <div class="compare-filter-fields">
+            <div class="filter-item compare-filter-item">
+              <label>Tahun Final</label>
+              <select id="compareFinalYear"></select>
+            </div>
+            <div class="filter-item compare-filter-item">
+              <label>Bulan Final</label>
+              <select id="compareFinalMonth"></select>
+            </div>
+          </div>
+        </div>
 <div class="filter-item komoditas-only" style="display:none">
           <label>Tampilan</label>
           <select id="commodityMode">
@@ -199,6 +216,17 @@
           </div>
         </div>
 
+        <div id="comparisonGroupHeader" class="comparison-group-header hidden">
+          <div class="comparison-spacer"></div>
+          <div class="comparison-band comparison-final-band">
+            <span>ANGKA FINAL PEMBANDING</span>
+            <strong id="comparisonFinalLabel">-</strong>
+          </div>
+          <div class="comparison-band comparison-asem-band">
+            <span>ANGKA SEMENTARA</span>
+            <strong id="comparisonAsemLabel">-</strong>
+          </div>
+        </div>
         <div class="table-wrap">
           <table id="mainTable" class="display nowrap" style="width:100%"></table>
         </div>
