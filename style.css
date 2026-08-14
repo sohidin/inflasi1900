@@ -730,3 +730,56 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   .comparison-search{justify-content:space-between}
   .comparison-search input{flex:1;width:auto}
 }
+
+
+/* ===== V10.7: samakan Inflasi Asem/Final dengan MtM-YtD-YoY ===== */
+/* Menu Inflasi Asem dan Inflasi Final mengikuti ukuran serta ritme submenu-parent */
+.submenu > .leaf-main{
+  min-height:43px!important;
+  padding:9px 10px!important;
+  margin:2px 0!important;
+  border-radius:11px!important;
+
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:10px!important;
+
+  font-size:13px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  letter-spacing:0!important;
+
+  color:#c9dfed!important;
+  background:transparent!important;
+}
+
+/* Ikon dibuat seimbang dengan ikon MtM/YtD/YoY */
+.submenu > .leaf-main .leaf-icon{
+  width:22px!important;
+  min-width:22px!important;
+  margin-right:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  color:#7dcfff!important;
+  font-size:13px!important;
+}
+
+/* Hover mengikuti submenu-parent */
+.submenu > .leaf-main:hover{
+  background:rgba(255,255,255,.065)!important;
+  color:#fff!important;
+  transform:none!important;
+}
+
+/* Saat menu aktif tetap jelas, tetapi ukuran tidak berubah */
+.submenu > .leaf-main.active{
+  min-height:43px!important;
+  padding:9px 10px!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  background:linear-gradient(135deg,rgba(57,112,154,.72),rgba(66,126,170,.58))!important;
+  color:#fff!important;
+  box-shadow:inset 3px 0 0 #34b9e5!important;
+}

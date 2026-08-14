@@ -163,3 +163,9 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Header merge dibuat native HTML agar posisi kolom selalu presisi.
 - Label diubah menjadi "Angka Final".
 - Search, Excel, CSV, PDF, dan Image tetap tersedia.
+
+
+## V10.7
+- Inflasi Asem dan Inflasi Final diseragamkan dengan menu MtM/YtD/YoY.
+- Font size menjadi 13px, font-weight 700, tinggi 43px, padding 9px 10px.
+- Jarak dan ukuran ikon disamakan agar ritme sidebar konsisten.
