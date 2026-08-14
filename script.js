@@ -21,7 +21,7 @@ const Api = {
   async request(params = {}) {
     if (
       !CONFIG.API_URL ||
-      CONFIG.API_URL.includes("https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec") ||
+      CONFIG.API_URL.includes("PASTE_APPS_SCRIPT_WEB_APP_URL_HERE") ||
       !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(CONFIG.API_URL)
     ) {
       throw new Error("URL Apps Script belum valid di script.js");
