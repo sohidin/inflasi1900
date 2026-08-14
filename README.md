@@ -184,3 +184,9 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
   - Komoditas Andil
 - Excel/CSV tetap berupa data tabular agar mudah diolah.
 - Clone export dibuat tanpa overflow/cropping agar layout, card, warna, header dan tabel mengikuti website.
+
+
+## V10.10
+- Toolbar Inflasi Asem (Excel/CSV/PDF/Image + Search) menjadi elemen permanen di index.html.
+- JavaScript hanya melakukan show/hide sehingga toolbar tidak hilang saat cleanup DataTables.
+- Event tombol memakai `.onclick` agar tidak menumpuk setelah pindah menu berulang kali.

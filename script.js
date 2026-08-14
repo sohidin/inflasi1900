@@ -354,7 +354,12 @@ function viewTitle(){
 
 function cleanupStandardTableUi(){
   // Remove toolbar custom dari tabel comparison jika user berpindah menu.
-  document.getElementById("comparisonToolbar")?.remove();
+  const comparisonToolbar=document.getElementById("comparisonToolbar");
+  if(comparisonToolbar){
+    comparisonToolbar.classList.add("hidden");
+    const q=comparisonToolbar.querySelector("#comparisonSearchInput");
+    if(q) q.value="";
+  }
 
   // Destroy DataTables instance aktif bila masih ada.
   try{
@@ -436,38 +441,22 @@ function renderComparisonTable(r){
             </td>`).join("")}
         </tr>`).join("")}
     </tbody>`;
+  const toolbar=document.getElementById("comparisonToolbar");
+  toolbar.classList.remove("hidden");
 
-  let toolbar=document.getElementById("comparisonToolbar");
-  if(toolbar) toolbar.remove();
-
-  toolbar=document.createElement("div");
-  toolbar.id="comparisonToolbar";
-  toolbar.className="comparison-toolbar";
-  toolbar.innerHTML=`
-    <div class="comparison-downloads">
-      <button class="btn" type="button" data-cmp-export="excel">Excel</button>
-      <button class="btn" type="button" data-cmp-export="csv">CSV</button>
-      <button class="btn" type="button" data-cmp-export="pdf">PDF</button>
-      <button class="btn" type="button" data-cmp-export="image">Image</button>
-    </div>
-    <label class="comparison-search">
-      <span>Cari:</span>
-      <input id="comparisonSearchInput" type="search" autocomplete="off">
-    </label>`;
-
-  table.parentNode.insertBefore(toolbar,table);
-
-  document.getElementById("comparisonSearchInput").addEventListener("input",e=>{
+  const searchInput=document.getElementById("comparisonSearchInput");
+  searchInput.value="";
+  searchInput.oninput=e=>{
     const q=String(e.target.value||"").trim().toLowerCase();
     table.querySelectorAll("tbody tr").forEach(tr=>{
       tr.style.display=!q||tr.textContent.toLowerCase().includes(q)?"":"none";
     });
-  });
+  };
 
-  toolbar.querySelector('[data-cmp-export="pdf"]').addEventListener("click",downloadComparisonVisualPdf);
-  toolbar.querySelector('[data-cmp-export="image"]').addEventListener("click",downloadComparisonVisualImage);
-  toolbar.querySelector('[data-cmp-export="csv"]').addEventListener("click",downloadComparisonCsv);
-  toolbar.querySelector('[data-cmp-export="excel"]').addEventListener("click",downloadComparisonExcel);
+  toolbar.querySelector('[data-cmp-export="pdf"]').onclick=downloadComparisonVisualPdf;
+  toolbar.querySelector('[data-cmp-export="image"]').onclick=downloadComparisonVisualImage;
+  toolbar.querySelector('[data-cmp-export="csv"]').onclick=downloadComparisonCsv;
+  toolbar.querySelector('[data-cmp-export="excel"]').onclick=downloadComparisonExcel;
 }
 
 function formatComparisonNumber(v){
@@ -625,6 +614,7 @@ async function downloadComparisonVisualPdf(){
 }
 
 function renderStandard(r){
+  document.getElementById("comparisonToolbar")?.classList.add("hidden");
   document.getElementById("standardTableSection").classList.remove("hidden");
   document.getElementById("commoditySection").classList.add("hidden");
   cleanupStandardTableUi();
@@ -734,6 +724,7 @@ function renderStandard(r){
   });
 }
 function renderCommodity(r){
+  document.getElementById("comparisonToolbar")?.classList.add("hidden");
   cleanupStandardTableUi();
   state.commodityData = r;
   document.getElementById("standardTableSection").classList.add("hidden");

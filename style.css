@@ -876,3 +876,43 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
 #comparisonExportClone .comparison-native-table td{
   vertical-align:middle!important;
 }
+
+
+/* ===== V10.10 permanent Inflasi Asem toolbar ===== */
+#comparisonToolbar.hidden{display:none!important}
+#comparisonToolbar:not(.hidden){
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:14px!important;
+  margin:10px 0 14px!important;
+  padding:0!important;
+}
+#comparisonToolbar .comparison-downloads{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  flex-wrap:wrap!important;
+}
+#comparisonToolbar .comparison-search{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin-left:auto!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  color:#49667b!important;
+}
+#comparisonToolbar #comparisonSearchInput{
+  width:230px!important;
+  height:38px!important;
+  border:1px solid #d7e4ed!important;
+  border-radius:10px!important;
+  padding:0 10px!important;
+  background:#fff!important;
+}
+@media(max-width:900px){
+  #comparisonToolbar:not(.hidden){align-items:stretch!important;flex-direction:column!important}
+  #comparisonToolbar .comparison-search{width:100%!important;margin-left:0!important}
+  #comparisonToolbar #comparisonSearchInput{flex:1!important;width:auto!important}
+}
