@@ -133,3 +133,11 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Angka Final Pembanding colspan 3.
 - Angka Sementara colspan 3.
 - MtM/YtD/YoY tepat di bawah masing-masing grup.
+
+
+## V10.3
+- URL Apps Script sudah diisi:
+  `https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec`
+- Spreadsheet ID sudah dikunci ke:
+  `1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI`
+- Tidak perlu lagi mengedit `API_URL` secara manual setelah upload ke GitHub.
