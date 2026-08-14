@@ -449,3 +449,84 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   text-align:center !important;
   box-sizing:border-box !important;
 }
+
+/* ===== V10.2 merged table header ===== */
+.comparison-group-header{display:none!important}
+
+.headline-comparison #mainTable{
+  table-layout:fixed!important;
+  width:100%!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th{
+  text-align:center!important;
+  vertical-align:middle!important;
+  padding:10px 8px!important;
+  border-bottom:0!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th.merged-id-head{
+  background:#eef5fa!important;
+  color:#2b5069!important;
+  font-size:11.5px!important;
+  font-weight:800!important;
+  border-bottom:1px solid #d5e3ed!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th.merged-final-head{
+  background:linear-gradient(135deg,#e8f1f8,#dbeaf5)!important;
+  color:#245779!important;
+  border-left:1px solid #d1e2ee!important;
+  border-right:1px solid #d1e2ee!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th.merged-asem-head{
+  background:linear-gradient(135deg,#e6f7f2,#d7f0e7)!important;
+  color:#087757!important;
+  border-right:1px solid #cee7de!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th span{
+  display:block;
+  font-size:10px;
+  line-height:1.2;
+  font-weight:800;
+  letter-spacing:.08em;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th small{
+  display:block;
+  margin-top:4px;
+  font-size:10px;
+  line-height:1.15;
+  font-weight:700;
+  letter-spacing:0;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-metric-row th{
+  text-align:center!important;
+  padding:8px 7px!important;
+  font-size:11px!important;
+  font-weight:800!important;
+  color:#31556d!important;
+  border-bottom:1px solid #cfdfea!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-metric-row th:nth-child(-n+3){
+  background:#edf4f9!important;
+}
+.headline-comparison #mainTable.dataTable thead tr.merged-metric-row th:nth-child(n+4){
+  background:#ebf7f3!important;
+}
+
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th::before,
+.headline-comparison #mainTable.dataTable thead tr.merged-group-row th::after{
+  display:none!important;
+}
+
+.headline-comparison #mainTable tbody td:nth-child(1){width:12%!important}
+.headline-comparison #mainTable tbody td:nth-child(2){width:32%!important}
+.headline-comparison #mainTable tbody td:nth-child(n+3){
+  width:9.333%!important;
+  text-align:center!important;
+}

@@ -316,7 +316,6 @@ function updateUI(){
 
   const asemHeadline=state.source==="asem" && state.view==="headline";
   document.getElementById("headlineCompareFilters")?.classList.toggle("hidden",!asemHeadline);
-  document.getElementById("comparisonGroupHeader")?.classList.toggle("hidden",!asemHeadline);
   document.getElementById("standardTableSection")?.classList.toggle("headline-comparison",asemHeadline);
 
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
@@ -337,24 +336,57 @@ function renderStandard(r){
   if(state.mainDt){ state.mainDt.destroy(); state.mainDt=null; }
 
   const table = document.getElementById("mainTable");
-  table.innerHTML = "<thead><tr></tr></thead><tbody></tbody>";
-  const tr = table.querySelector("thead tr");
-  r.columns.forEach((c,i)=>{const th=document.createElement("th");th.innerHTML=formatColumnTitle(c,i);tr.appendChild(th);});
+
+  const isComparison =
+    state.source==="asem" &&
+    state.view==="headline" &&
+    r.finalPeriod &&
+    r.asemPeriod;
+
+  if(isComparison){
+    table.innerHTML = `
+      <thead>
+        <tr class="merged-group-row">
+          <th rowspan="2" class="merged-id-head">Kode Kota</th>
+          <th rowspan="2" class="merged-id-head">Nama Kota</th>
+          <th colspan="3" class="merged-final-head">
+            <span>ANGKA FINAL PEMBANDING</span>
+            <small>Tahun ${escapeHtml(r.finalPeriod.year)} • Bulan ${escapeHtml(r.finalPeriod.month)}</small>
+          </th>
+          <th colspan="3" class="merged-asem-head">
+            <span>ANGKA SEMENTARA</span>
+            <small>Tahun ${escapeHtml(r.asemPeriod.year)} • Bulan ${escapeHtml(r.asemPeriod.month)}</small>
+          </th>
+        </tr>
+        <tr class="merged-metric-row">
+          <th>MtM</th><th>YtD</th><th>YoY</th>
+          <th>MtM</th><th>YtD</th><th>YoY</th>
+        </tr>
+      </thead>
+      <tbody></tbody>`;
+  }else{
+    table.innerHTML = "<thead><tr></tr></thead><tbody></tbody>";
+    const tr = table.querySelector("thead tr");
+    r.columns.forEach((c,i)=>{
+      const th=document.createElement("th");
+      th.innerHTML=formatColumnTitle(c,i);
+      tr.appendChild(th);
+    });
+  }
 
   document.getElementById("tableTitle").textContent = r.title || viewTitle();
   document.getElementById("tableInfo").textContent = r.info || "";
 
-  if(state.source==="asem" && state.view==="headline" && r.finalPeriod && r.asemPeriod){
-    document.getElementById("comparisonFinalLabel").textContent =
-      `Tahun ${r.finalPeriod.year} • Bulan ${r.finalPeriod.month}`;
-    document.getElementById("comparisonAsemLabel").textContent =
-      `Tahun ${r.asemPeriod.year} • Bulan ${r.asemPeriod.month}`;
-  }
-
   state.mainDt = $("#mainTable").DataTable({
     data:r.rows,
-    columns:r.columns.map((c,i)=>({data:i,title:formatColumnTitle(c,i),render:(data,type,row,meta)=>renderCell(data,type,row,meta),className:i>=2?"num-cell":""})),
+    columns:r.columns.map((c,i)=>({
+      data:i,
+      ...(isComparison ? {} : {title:formatColumnTitle(c,i)}),
+      render:(data,type,row,meta)=>renderCell(data,type,row,meta),
+      className:i>=2?"num-cell":""
+    })),
     scrollX:true,pageLength:25,order:[],
+    orderCellsTop:false,
     dom:"Bfrtip",
     buttons:[
       {extend:"excelHtml5",title:exportTitle()},
@@ -599,16 +631,6 @@ function buildStandardExportClone(){
       <strong>${escapeHtml(meta.timeText)}</strong>
     </div>`;
   clone.insertBefore(report,clone.firstChild);
-
-  if(state.source==="asem" && state.view==="headline"){
-    const group=document.getElementById("comparisonGroupHeader");
-    if(group && !group.classList.contains("hidden")){
-      const copied=group.cloneNode(true);
-      copied.classList.remove("hidden");
-      const tableWrap=clone.querySelector(".table-wrap");
-      if(tableWrap) tableWrap.parentNode.insertBefore(copied,tableWrap);
-    }
-  }
 
   document.body.appendChild(clone);
   return {clone,meta};

@@ -125,3 +125,11 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 - PDF dan Image untuk menu standar dibuat dari tampilan web/card.
 - Saat download, seluruh baris tabel dimunculkan sementara agar hasil tidak hanya halaman pertama.
 - Header download memuat jenis data, data-per (untuk Asem), serta tanggal/jam download.
+
+
+## V10.2
+Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merge cell:
+- Kode Kota dan Nama Kota rowspan 2.
+- Angka Final Pembanding colspan 3.
+- Angka Sementara colspan 3.
+- MtM/YtD/YoY tepat di bawah masing-masing grup.
