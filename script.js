@@ -19,7 +19,7 @@ const state = {
 
 const Api = {
   async request(params = {}) {
-    if (!CONFIG.API_URL || CONFIG.API_URL.includes("PASTE_APPS_SCRIPT")) {
+    if (!CONFIG.API_URL || CONFIG.API_URL.includes("https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec")) {
       throw new Error("URL Apps Script belum diisi di script.js");
     }
     const url = new URL(CONFIG.API_URL);
