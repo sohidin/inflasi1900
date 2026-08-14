@@ -172,3 +172,15 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Tambah pilihan jumlah baris: 25, 50, 100, 250, atau Semua.
 - Pilihan jumlah baris disimpan di browser sehingga tetap sama saat pindah menu.
 - `deferRender` dan `searchDelay` ditambahkan untuk mengurangi beban render dan pencarian pada tabel besar.
+
+
+## V10.9
+- Memunculkan kembali toolbar Download + Search pada menu Inflasi Asem.
+- Penyebab sebelumnya: CSS V10.8 menyembunyikan `#comparisonToolbar`.
+- PDF/Image seluruh kelompok menu menggunakan capture visual web:
+  - Inflasi Asem vs Angka Final
+  - Inflasi / Andil MtM, YtD, YoY
+  - Inflasi Final
+  - Komoditas Andil
+- Excel/CSV tetap berupa data tabular agar mudah diolah.
+- Clone export dibuat tanpa overflow/cropping agar layout, card, warna, header dan tabel mengikuti website.

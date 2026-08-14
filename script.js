@@ -535,14 +535,26 @@ async function comparisonExportCanvas(){
   const meta=getDownloadMeta();
 
   clone.id="comparisonExportClone";
+  clone.classList.add("visual-export-clone");
   clone.style.position="fixed";
   clone.style.left="-20000px";
   clone.style.top="0";
   clone.style.width="1450px";
   clone.style.maxWidth="1450px";
+  clone.style.height="auto";
+  clone.style.overflow="visible";
   clone.style.background="#fff";
   clone.style.padding="22px";
+
+  // Kontrol interaktif tidak dimasukkan ke hasil, tetapi layout data tetap sama web.
   clone.querySelector("#comparisonToolbar")?.remove();
+
+  // Ikuti search yang sedang aktif: baris tersembunyi di web juga tersembunyi di export.
+  const originalRows=[...section.querySelectorAll(".comparison-native-table tbody tr")];
+  const clonedRows=[...clone.querySelectorAll(".comparison-native-table tbody tr")];
+  originalRows.forEach((row,i)=>{
+    if(clonedRows[i]) clonedRows[i].style.display=row.style.display;
+  });
 
   const header=document.createElement("div");
   header.className="standard-export-header";
@@ -903,6 +915,7 @@ function buildStandardExportClone(){
   const meta=getDownloadMeta();
 
   clone.id="standardExportClone";
+  clone.classList.add("visual-export-clone");
   clone.style.position="fixed";
   clone.style.left="-20000px";
   clone.style.top="0";
@@ -1025,8 +1038,16 @@ async function downloadStandardVisualPdf(){
   const content=[];
   let y=0;
 
+  // Use conservative slices so the browser-rendered table remains readable.
   while(y<canvas.height){
-    const h=Math.min(slicePx,canvas.height-y);
+    let h=Math.min(slicePx,canvas.height-y);
+
+    // Avoid tiny last fragments.
+    const remaining=canvas.height-(y+h);
+    if(remaining>0 && remaining<slicePx*0.16){
+      h=canvas.height-y;
+    }
+
     const slice=document.createElement("canvas");
     slice.width=canvas.width;
     slice.height=h;
@@ -1073,7 +1094,7 @@ function buildCommodityExportClone(){
   const meta=getDownloadMeta();
   const sourceEl=document.getElementById("commoditySection");
   const clone=sourceEl.cloneNode(true);
-  clone.id="commodityExportClone";clone.classList.remove("hidden");
+  clone.id="commodityExportClone";clone.classList.remove("hidden");clone.classList.add("visual-export-clone");
   clone.style.width="1400px";clone.style.maxWidth="1400px";clone.style.margin="0";clone.style.padding="24px";clone.style.background="#f4f7fb";
   clone.querySelector(".commodity-downloads")?.remove();
   clone.querySelector(".commodity-search-wrap")?.remove();
