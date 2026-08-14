@@ -148,3 +148,18 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Versi sebelumnya salah memeriksa URL Apps Script yang benar sebagai URL yang belum diisi.
 - Login sekarang benar-benar mengirim request ke Web App Apps Script.
 - Ditambahkan pesan error koneksi/respons Apps Script yang lebih jelas.
+
+
+## V10.5
+- Alignment tabel Inflasi Asem vs Final diperbaiki.
+- Header dan body memakai `colgroup` yang sama.
+- `scrollX` dimatikan khusus tabel perbandingan.
+- MtM/YtD/YoY dan angka body dibuat center presisi.
+- Separator Final vs Sementara dibuat lebih jelas.
+
+
+## V10.6
+- Tabel Inflasi Asem vs Angka Final tidak lagi memakai DataTables.
+- Header merge dibuat native HTML agar posisi kolom selalu presisi.
+- Label diubah menjadi "Angka Final".
+- Search, Excel, CSV, PDF, dan Image tetap tersedia.

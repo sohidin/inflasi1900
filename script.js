@@ -308,7 +308,7 @@ async function loadCurrentView(){
         finalMonth:valueOf("compareFinalMonth")
       },300000);
       state.comparisonData=r;
-      renderStandard(r);
+      renderComparisonTable(r);
     }else if(state.view === "headline"){
       r = await cachedApi("headline",{action:"headline", ...args},300000);
       state.comparisonData=null;
@@ -335,7 +335,7 @@ function updateUI(){
 
   const asemHeadline=state.source==="asem" && state.view==="headline";
   document.getElementById("headlineCompareFilters")?.classList.toggle("hidden",!asemHeadline);
-  document.getElementById("standardTableSection")?.classList.toggle("headline-comparison",asemHeadline);
+  document.getElementById("standardTableSection")?.classList.toggle("headline-comparison",false);
 
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
   document.getElementById("statYear").textContent = valueOf("filterYear") || "-";
@@ -347,6 +347,232 @@ function viewTitle(){
   const p = {mtm:"MtM",ytd:"YtD",yoy:"YoY"}[state.period] || "";
   if(state.view === "komoditas") return `Komoditas Andil ${p}`;
   return `${state.view === "andil" ? "Andil" : "Inflasi"} ${p}`;
+}
+
+
+function renderComparisonTable(r){
+  document.getElementById("standardTableSection").classList.remove("hidden");
+  document.getElementById("commoditySection").classList.add("hidden");
+
+  if(state.mainDt){
+    try{ state.mainDt.destroy(); }catch(_){}
+    state.mainDt=null;
+  }
+
+  document.getElementById("tableTitle").textContent="Inflasi Asem vs Angka Final";
+  document.getElementById("tableInfo").textContent=
+    `Angka Final ${r.finalPeriod.year}-${r.finalPeriod.month} • dibandingkan dengan Angka Sementara ${r.asemPeriod.year}-${r.asemPeriod.month}`;
+
+  const table=document.getElementById("mainTable");
+  table.className="comparison-native-table";
+  table.innerHTML=`
+    <thead>
+      <tr class="cmp-group-row">
+        <th rowspan="2" class="cmp-id cmp-kode">Kode Kota</th>
+        <th rowspan="2" class="cmp-id cmp-nama">Nama Kota</th>
+        <th colspan="3" class="cmp-group cmp-final">
+          <strong>ANGKA FINAL</strong>
+          <span>Tahun ${escapeHtml(r.finalPeriod.year)} • Bulan ${escapeHtml(r.finalPeriod.month)}</span>
+        </th>
+        <th colspan="3" class="cmp-group cmp-asem">
+          <strong>ANGKA SEMENTARA</strong>
+          <span>Tahun ${escapeHtml(r.asemPeriod.year)} • Bulan ${escapeHtml(r.asemPeriod.month)}</span>
+        </th>
+      </tr>
+      <tr class="cmp-metric-row">
+        <th class="cmp-final-sub">MtM</th>
+        <th class="cmp-final-sub">YtD</th>
+        <th class="cmp-final-sub">YoY</th>
+        <th class="cmp-asem-sub">MtM</th>
+        <th class="cmp-asem-sub">YtD</th>
+        <th class="cmp-asem-sub">YoY</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(r.rows||[]).map(row=>`
+        <tr>
+          <td class="cmp-code">${escapeHtml(row[0])}</td>
+          <td class="cmp-name">${escapeHtml(row[1])}</td>
+          ${row.slice(2).map((v,idx)=>`
+            <td class="cmp-num ${idx===3?"cmp-split":""}">
+              ${formatComparisonNumber(v)}
+            </td>`).join("")}
+        </tr>`).join("")}
+    </tbody>`;
+
+  let toolbar=document.getElementById("comparisonToolbar");
+  if(toolbar) toolbar.remove();
+
+  toolbar=document.createElement("div");
+  toolbar.id="comparisonToolbar";
+  toolbar.className="comparison-toolbar";
+  toolbar.innerHTML=`
+    <div class="comparison-downloads">
+      <button class="btn" type="button" data-cmp-export="excel">Excel</button>
+      <button class="btn" type="button" data-cmp-export="csv">CSV</button>
+      <button class="btn" type="button" data-cmp-export="pdf">PDF</button>
+      <button class="btn" type="button" data-cmp-export="image">Image</button>
+    </div>
+    <label class="comparison-search">
+      <span>Cari:</span>
+      <input id="comparisonSearchInput" type="search" autocomplete="off">
+    </label>`;
+
+  table.parentNode.insertBefore(toolbar,table);
+
+  document.getElementById("comparisonSearchInput").addEventListener("input",e=>{
+    const q=String(e.target.value||"").trim().toLowerCase();
+    table.querySelectorAll("tbody tr").forEach(tr=>{
+      tr.style.display=!q||tr.textContent.toLowerCase().includes(q)?"":"none";
+    });
+  });
+
+  toolbar.querySelector('[data-cmp-export="pdf"]').addEventListener("click",downloadComparisonVisualPdf);
+  toolbar.querySelector('[data-cmp-export="image"]').addEventListener("click",downloadComparisonVisualImage);
+  toolbar.querySelector('[data-cmp-export="csv"]').addEventListener("click",downloadComparisonCsv);
+  toolbar.querySelector('[data-cmp-export="excel"]').addEventListener("click",downloadComparisonExcel);
+}
+
+function formatComparisonNumber(v){
+  if(v===null||v===undefined||v==="") return "";
+  const n=Number(v);
+  if(!Number.isFinite(n)) return escapeHtml(v);
+  const cls=n>0?"positive":n<0?"negative":"";
+  return `<span class="${cls}">${n.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
+}
+
+function comparisonRowsForExport(){
+  const r=state.comparisonData;
+  if(!r) return [];
+  return (r.rows||[]).map(row=>[
+    row[0],row[1],
+    round2(row[2]),round2(row[3]),round2(row[4]),
+    round2(row[5]),round2(row[6]),round2(row[7])
+  ]);
+}
+
+function downloadComparisonCsv(){
+  const meta=getDownloadMeta();
+  const r=state.comparisonData;
+  const rows=[
+    ["Jenis Data","Inflasi Asem vs Angka Final"],
+    ["Angka Final",`${r.finalPeriod.year}-${r.finalPeriod.month}`],
+    ["Angka Sementara",`${r.asemPeriod.year}-${r.asemPeriod.month}`],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    ["Kode Kota","Nama Kota","Final MtM","Final YtD","Final YoY","Sementara MtM","Sementara YtD","Sementara YoY"],
+    ...comparisonRowsForExport()
+  ];
+  const csv=rows.map(x=>x.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=safeName(`Inflasi Asem vs Angka Final-${meta.fileStamp}`)+".csv";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+
+function downloadComparisonExcel(){
+  const meta=getDownloadMeta();
+  const r=state.comparisonData;
+  const rows=[
+    ["INFLASI ASEM VS ANGKA FINAL"],
+    ["Angka Final",`${r.finalPeriod.year}-${r.finalPeriod.month}`],
+    ["Angka Sementara",`${r.asemPeriod.year}-${r.asemPeriod.month}`],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    ["Kode Kota","Nama Kota","Final MtM","Final YtD","Final YoY","Sementara MtM","Sementara YtD","Sementara YoY"],
+    ...comparisonRowsForExport()
+  ];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),"Inflasi Asem vs Final");
+  XLSX.writeFile(wb,safeName(`Inflasi Asem vs Angka Final-${meta.fileStamp}`)+".xlsx");
+}
+
+async function comparisonExportCanvas(){
+  const section=document.getElementById("standardTableSection");
+  const clone=section.cloneNode(true);
+  const meta=getDownloadMeta();
+
+  clone.id="comparisonExportClone";
+  clone.style.position="fixed";
+  clone.style.left="-20000px";
+  clone.style.top="0";
+  clone.style.width="1450px";
+  clone.style.maxWidth="1450px";
+  clone.style.background="#fff";
+  clone.style.padding="22px";
+  clone.querySelector("#comparisonToolbar")?.remove();
+
+  const header=document.createElement("div");
+  header.className="standard-export-header";
+  header.innerHTML=`
+    <div class="export-brand-badge">IF</div>
+    <div class="standard-export-copy">
+      <div class="export-kicker">DASHBOARD MONITORING INFLASI</div>
+      <div class="export-main-title">Inflasi Asem vs Angka Final</div>
+      <div class="export-subtitle">
+        Angka Final ${escapeHtml(state.comparisonData.finalPeriod.year)}-${escapeHtml(state.comparisonData.finalPeriod.month)}
+        • Angka Sementara ${escapeHtml(state.comparisonData.asemPeriod.year)}-${escapeHtml(state.comparisonData.asemPeriod.month)}
+        ${meta.sourcePeriod?` • Data per ${escapeHtml(meta.sourcePeriod)}`:""}
+      </div>
+    </div>
+    <div class="export-time-box">
+      <span>Waktu Download</span>
+      <strong>${escapeHtml(meta.dateText)}</strong>
+      <strong>${escapeHtml(meta.timeText)}</strong>
+    </div>`;
+  clone.insertBefore(header,clone.firstChild);
+
+  document.body.appendChild(clone);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+  try{
+    const canvas=await html2canvas(clone,{
+      backgroundColor:"#ffffff",
+      scale:1.25,
+      useCORS:true,
+      logging:false,
+      width:clone.scrollWidth,
+      height:clone.scrollHeight,
+      windowWidth:1550,
+      windowHeight:clone.scrollHeight+100
+    });
+    return {canvas,meta};
+  }finally{
+    clone.remove();
+  }
+}
+
+async function downloadComparisonVisualImage(){
+  const {canvas,meta}=await comparisonExportCanvas();
+  const a=document.createElement("a");
+  a.download=safeName(`Inflasi Asem vs Angka Final-${meta.fileStamp}`)+".png";
+  a.href=canvas.toDataURL("image/png");
+  a.click();
+}
+
+async function downloadComparisonVisualPdf(){
+  const {canvas,meta}=await comparisonExportCanvas();
+  const pageW=841.89,pageH=595.28,margin=18;
+  const usableW=pageW-margin*2,usableH=pageH-margin*2;
+  let width=usableW;
+  let height=width*(canvas.height/canvas.width);
+  if(height>usableH){
+    const scale=usableH/height;
+    height*=scale;
+    width*=scale;
+  }
+  pdfMake.createPdf({
+    pageSize:"A4",
+    pageOrientation:"landscape",
+    pageMargins:[margin,margin,margin,margin],
+    content:[{image:canvas.toDataURL("image/png"),width,alignment:"center"}],
+    info:{title:"Inflasi Asem vs Angka Final"}
+  }).download(safeName(`Inflasi Asem vs Angka Final-${meta.fileStamp}`)+".pdf");
 }
 
 function renderStandard(r){
@@ -362,14 +588,27 @@ function renderStandard(r){
     r.finalPeriod &&
     r.asemPeriod;
 
+  table.classList.toggle("comparison-table",!!isComparison);
+  table.classList.toggle("nowrap",!isComparison);
+
   if(isComparison){
     table.innerHTML = `
+      <colgroup>
+        <col class="col-kode">
+        <col class="col-nama">
+        <col class="col-metric">
+        <col class="col-metric">
+        <col class="col-metric">
+        <col class="col-metric">
+        <col class="col-metric">
+        <col class="col-metric">
+      </colgroup>
       <thead>
         <tr class="merged-group-row">
           <th rowspan="2" class="merged-id-head">Kode Kota</th>
           <th rowspan="2" class="merged-id-head">Nama Kota</th>
           <th colspan="3" class="merged-final-head">
-            <span>ANGKA FINAL PEMBANDING</span>
+            <span>ANGKA FINAL</span>
             <small>Tahun ${escapeHtml(r.finalPeriod.year)} • Bulan ${escapeHtml(r.finalPeriod.month)}</small>
           </th>
           <th colspan="3" class="merged-asem-head">
@@ -404,8 +643,16 @@ function renderStandard(r){
       render:(data,type,row,meta)=>renderCell(data,type,row,meta),
       className:i>=2?"num-cell":""
     })),
-    scrollX:true,pageLength:25,order:[],
+    scrollX:!isComparison,
+    autoWidth:false,
+    pageLength:25,
+    order:[],
     orderCellsTop:false,
+    columnDefs:isComparison ? [
+      {targets:0,width:"12%"},
+      {targets:1,width:"32%"},
+      {targets:[2,3,4,5,6,7],width:"9.3333%",className:"num-cell"}
+    ] : [],
     dom:"Bfrtip",
     buttons:[
       {extend:"excelHtml5",title:exportTitle()},
