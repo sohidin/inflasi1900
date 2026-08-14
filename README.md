@@ -141,3 +141,10 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Spreadsheet ID sudah dikunci ke:
   `1i-bg6Jd2bNiJhwB90UjrJZs_wSaUEenYydTcLgOKnNI`
 - Tidak perlu lagi mengedit `API_URL` secara manual setelah upload ke GitHub.
+
+
+## V10.4 Login Fix
+- Memperbaiki bug validasi `API_URL`.
+- Versi sebelumnya salah memeriksa URL Apps Script yang benar sebagai URL yang belum diisi.
+- Login sekarang benar-benar mengirim request ke Web App Apps Script.
+- Ditambahkan pesan error koneksi/respons Apps Script yang lebih jelas.

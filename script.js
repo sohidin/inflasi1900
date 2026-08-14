@@ -19,16 +19,35 @@ const state = {
 
 const Api = {
   async request(params = {}) {
-    if (!CONFIG.API_URL || CONFIG.API_URL.includes("https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec")) {
-      throw new Error("URL Apps Script belum diisi di script.js");
+    if (
+      !CONFIG.API_URL ||
+      CONFIG.API_URL.includes("https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec") ||
+      !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec(?:\?.*)?$/.test(CONFIG.API_URL)
+    ) {
+      throw new Error("URL Apps Script belum valid di script.js");
     }
     const url = new URL(CONFIG.API_URL);
     Object.entries(params).forEach(([k,v]) => {
       if (v !== "" && v !== undefined && v !== null) url.searchParams.set(k,v);
     });
 
-    const res = await fetch(url.toString(), {cache:"no-store"});
-    const json = await res.json();
+    let res;
+    try {
+      res = await fetch(url.toString(), {cache:"no-store"});
+    } catch (networkErr) {
+      throw new Error("Tidak dapat terhubung ke Apps Script. Periksa deployment Web App dan koneksi internet.");
+    }
+
+    let json;
+    try {
+      json = await res.json();
+    } catch (parseErr) {
+      throw new Error("Respons Apps Script tidak valid. Pastikan deployment menggunakan Web App dan aksesnya diizinkan.");
+    }
+
+    if (!res.ok) {
+      throw new Error(`Apps Script HTTP ${res.status}.`);
+    }
     if (!json.ok) throw new Error(json.message || "Terjadi kesalahan.");
     return json;
   }
