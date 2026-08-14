@@ -15,6 +15,7 @@ const state = {
   updatedAtCache: null,
   finalFilterCache: null,
   comparisonData: null,
+  pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 };
 
 const Api = {
@@ -350,14 +351,50 @@ function viewTitle(){
 }
 
 
+
+function cleanupStandardTableUi(){
+  // Remove toolbar custom dari tabel comparison jika user berpindah menu.
+  document.getElementById("comparisonToolbar")?.remove();
+
+  // Destroy DataTables instance aktif bila masih ada.
+  try{
+    if(state.mainDt){
+      state.mainDt.destroy();
+      state.mainDt=null;
+    }else if($.fn.dataTable && $.fn.dataTable.isDataTable("#mainTable")){
+      $("#mainTable").DataTable().destroy();
+    }
+  }catch(_){
+    state.mainDt=null;
+  }
+
+  // Safety cleanup: bila wrapper DataTables lama tertinggal, kembalikan table
+  // ke .table-wrap lalu hapus wrapper-nya.
+  const table=document.getElementById("mainTable");
+  const wrapper=document.getElementById("mainTable_wrapper");
+  const tableWrap=document.querySelector("#standardTableSection .table-wrap");
+
+  if(wrapper && table && tableWrap){
+    tableWrap.appendChild(table);
+    wrapper.remove();
+  }
+
+  // Hapus toolbar/wrapper liar yang mungkin tersisa dari render sebelumnya.
+  document.querySelectorAll("#standardTableSection .dataTables_wrapper").forEach(w=>{
+    if(w.id!=="mainTable_wrapper") w.remove();
+  });
+
+  if(table){
+    table.removeAttribute("style");
+    table.style.width="100%";
+  }
+}
+
 function renderComparisonTable(r){
   document.getElementById("standardTableSection").classList.remove("hidden");
   document.getElementById("commoditySection").classList.add("hidden");
 
-  if(state.mainDt){
-    try{ state.mainDt.destroy(); }catch(_){}
-    state.mainDt=null;
-  }
+  cleanupStandardTableUi();
 
   document.getElementById("tableTitle").textContent="Inflasi Asem vs Angka Final";
   document.getElementById("tableInfo").textContent=
@@ -578,9 +615,10 @@ async function downloadComparisonVisualPdf(){
 function renderStandard(r){
   document.getElementById("standardTableSection").classList.remove("hidden");
   document.getElementById("commoditySection").classList.add("hidden");
-  if(state.mainDt){ state.mainDt.destroy(); state.mainDt=null; }
+  cleanupStandardTableUi();
 
   const table = document.getElementById("mainTable");
+  table.className="display nowrap";
 
   const isComparison =
     state.source==="asem" &&
@@ -645,7 +683,14 @@ function renderStandard(r){
     })),
     scrollX:!isComparison,
     autoWidth:false,
-    pageLength:25,
+    deferRender:true,
+    processing:false,
+    searchDelay:250,
+    pageLength:state.pageLength,
+    lengthMenu:[
+      [25,50,100,250,-1],
+      [25,50,100,250,"Semua"]
+    ],
     order:[],
     orderCellsTop:false,
     columnDefs:isComparison ? [
@@ -653,17 +698,31 @@ function renderStandard(r){
       {targets:1,width:"32%"},
       {targets:[2,3,4,5,6,7],width:"9.3333%",className:"num-cell"}
     ] : [],
-    dom:"Bfrtip",
+    dom:"Blfrtip",
     buttons:[
       {extend:"excelHtml5",title:exportTitle()},
       {extend:"csvHtml5",title:exportTitle()},
       {text:"PDF",action:()=>downloadStandardVisualPdf()},
       {text:"Image",action:()=>downloadStandardVisualImage()}
     ],
-    language:{search:"Cari:",info:"_START_–_END_ dari _TOTAL_",zeroRecords:"Data tidak ditemukan",paginate:{next:"Berikut",previous:"Sebelum"}}
+    language:{
+      search:"Cari:",
+      lengthMenu:"Tampilkan _MENU_ baris",
+      info:"_START_–_END_ dari _TOTAL_",
+      infoEmpty:"0–0 dari 0",
+      zeroRecords:"Data tidak ditemukan",
+      paginate:{next:"Berikut",previous:"Sebelum"}
+    }
+  });
+
+  // Simpan pilihan jumlah baris user agar tidak kembali ke 25 saat pindah menu.
+  state.mainDt.on("length.dt",function(_e,_settings,len){
+    state.pageLength=Number(len);
+    localStorage.setItem("inflasi_page_length",String(len));
   });
 }
 function renderCommodity(r){
+  cleanupStandardTableUi();
   state.commodityData = r;
   document.getElementById("standardTableSection").classList.add("hidden");
   document.getElementById("commoditySection").classList.remove("hidden");

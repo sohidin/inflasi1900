@@ -165,7 +165,10 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Search, Excel, CSV, PDF, dan Image tetap tersedia.
 
 
-## V10.7
-- Inflasi Asem dan Inflasi Final diseragamkan dengan menu MtM/YtD/YoY.
-- Font size menjadi 13px, font-weight 700, tinggi 43px, padding 9px 10px.
-- Jarak dan ukuran ikon disamakan agar ritme sidebar konsisten.
+## V10.8
+- Memperbaiki tombol download dan search yang dobel saat berpindah dari tabel Inflasi Asem vs Angka Final ke menu standar.
+- Toolbar comparison lama sekarang dibersihkan sebelum tabel lain dirender.
+- Wrapper DataTables lama dibersihkan secara defensif agar tidak menumpuk.
+- Tambah pilihan jumlah baris: 25, 50, 100, 250, atau Semua.
+- Pilihan jumlah baris disimpan di browser sehingga tetap sama saat pindah menu.
+- `deferRender` dan `searchDelay` ditambahkan untuk mengurangi beban render dan pencarian pada tabel besar.

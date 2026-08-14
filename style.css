@@ -732,54 +732,92 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
 }
 
 
-/* ===== V10.7: samakan Inflasi Asem/Final dengan MtM-YtD-YoY ===== */
-/* Menu Inflasi Asem dan Inflasi Final mengikuti ukuran serta ritme submenu-parent */
-.submenu > .leaf-main{
-  min-height:43px!important;
-  padding:9px 10px!important;
-  margin:2px 0!important;
-  border-radius:11px!important;
-
-  display:flex!important;
-  align-items:center!important;
-  justify-content:flex-start!important;
-  gap:10px!important;
-
-  font-size:13px!important;
-  font-weight:700!important;
-  line-height:1.2!important;
-  letter-spacing:0!important;
-
-  color:#c9dfed!important;
-  background:transparent!important;
+/* ===== V10.8: single DataTables toolbar + page length ===== */
+#standardTableSection .dataTables_wrapper{
+  width:100%;
 }
 
-/* Ikon dibuat seimbang dengan ikon MtM/YtD/YoY */
-.submenu > .leaf-main .leaf-icon{
-  width:22px!important;
-  min-width:22px!important;
-  margin-right:0!important;
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  color:#7dcfff!important;
-  font-size:13px!important;
+/* Toolbar dibuat satu baris yang rapi: download + jumlah baris di kiri, search kanan */
+#standardTableSection .dataTables_wrapper .dt-buttons{
+  float:left;
+  margin:0 10px 12px 0!important;
 }
 
-/* Hover mengikuti submenu-parent */
-.submenu > .leaf-main:hover{
-  background:rgba(255,255,255,.065)!important;
-  color:#fff!important;
-  transform:none!important;
+#standardTableSection .dataTables_wrapper .dataTables_length{
+  float:left;
+  display:flex;
+  align-items:center;
+  min-height:38px;
+  margin:0 0 12px 0;
+  font-size:11px;
+  font-weight:700;
+  color:#49667b;
 }
 
-/* Saat menu aktif tetap jelas, tetapi ukuran tidak berubah */
-.submenu > .leaf-main.active{
-  min-height:43px!important;
-  padding:9px 10px!important;
-  font-size:13px!important;
-  font-weight:700!important;
-  background:linear-gradient(135deg,rgba(57,112,154,.72),rgba(66,126,170,.58))!important;
-  color:#fff!important;
-  box-shadow:inset 3px 0 0 #34b9e5!important;
+#standardTableSection .dataTables_wrapper .dataTables_length label{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  white-space:nowrap;
+}
+
+#standardTableSection .dataTables_wrapper .dataTables_length select{
+  width:auto!important;
+  min-width:72px;
+  height:36px;
+  padding:5px 25px 5px 9px!important;
+  border:1px solid #d7e4ed!important;
+  border-radius:10px!important;
+  background:#fff;
+  font-size:11px;
+  font-weight:700;
+  color:#2e5068;
+}
+
+#standardTableSection .dataTables_wrapper .dataTables_filter{
+  float:right;
+  margin:0 0 12px auto;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+}
+
+#standardTableSection .dataTables_wrapper .dataTables_filter label{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:11px;
+  font-weight:700;
+  color:#49667b;
+}
+
+#standardTableSection .dataTables_wrapper .dataTables_filter input{
+  width:230px;
+  height:36px;
+  margin-left:0!important;
+}
+
+/* Clear float before the table so header starts cleanly. */
+#standardTableSection .dataTables_wrapper .dataTables_filter + table,
+#standardTableSection .dataTables_wrapper .dataTables_scroll{
+  clear:both;
+}
+
+/* Prevent accidental visual duplicate if a stale comparison toolbar exists. */
+#standardTableSection:not(.headline-comparison) #comparisonToolbar{
+  display:none!important;
+}
+
+@media(max-width:900px){
+  #standardTableSection .dataTables_wrapper .dt-buttons,
+  #standardTableSection .dataTables_wrapper .dataTables_length,
+  #standardTableSection .dataTables_wrapper .dataTables_filter{
+    float:none!important;
+    width:100%;
+    justify-content:flex-start;
+  }
+  #standardTableSection .dataTables_wrapper .dataTables_filter input{
+    flex:1;
+    width:auto;
+  }
 }
