@@ -104,3 +104,11 @@ Jangan lupa isi `API_URL` di bagian atas `script.js`.
 ## V8.1 Hotfix
 - Fix syntax error deklarasi `firstPage` ganda pada `script.js` V8 yang membuat seluruh JavaScript berhenti, termasuk tombol login.
 - Export PDF/Image anti-crop V8 tetap dipertahankan.
+
+
+## V9
+- Data per Angka Sementara ikut hasil download.
+- Angka rata tengah dan header kab/kota 2 baris.
+- Highlight inflasi tertinggi merah, terendah hijau per komoditas.
+- Plus Jakarta Sans dan layout tabel lebih modern.
+- Cache browser + period index backend untuk mempercepat pindah menu/filter.

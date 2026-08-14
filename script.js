@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbzmHCrQOwwqhtiaRXZpCiPOAjfgerLblMwCEl-8OMYS_KCKrw3Oxt8GgCWdxiyf5PYJ/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbzYooEZ24ZOYifYGFnDdS-KN11lyAR2ZRrrxVVCKyM8IY8mSBRyuwl7fp9X4f1rnOFn/exec"
 };
 
 const state = {
@@ -10,6 +10,9 @@ const state = {
   filters: null,
   mainDt: null,
   commodityData: null,
+  filterCache: {},
+  responseCache: new Map(),
+  updatedAtCache: null,
 };
 
 const Api = {
@@ -28,6 +31,18 @@ const Api = {
     return json;
   }
 };
+
+function cacheKey(prefix,obj){
+  const ordered=Object.keys(obj||{}).sort().reduce((a,k)=>(a[k]=obj[k],a),{});
+  return prefix+":"+JSON.stringify(ordered);
+}
+async function cachedApi(prefix,params,ttlMs=120000){
+  const key=cacheKey(prefix,params), now=Date.now(), hit=state.responseCache.get(key);
+  if(hit && now-hit.time<ttlMs) return hit.data;
+  const data=await Api.request(params);
+  state.responseCache.set(key,{time:now,data});
+  return data;
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   bindLogin();
@@ -105,11 +120,13 @@ function bindAccordion(){
     btn.addEventListener("click", async () => {
       document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
       btn.classList.add("active");
-      state.source = btn.dataset.source;
-      state.period = btn.dataset.period || "";
-      state.view = btn.dataset.view;
-      await loadSourceFilters();
-      await loadUpdatedAt();
+      const previousSource=state.source;
+      state.source=btn.dataset.source;
+      state.period=btn.dataset.period||"";
+      state.view=btn.dataset.view;
+      if(previousSource!==state.source || !state.filterCache[state.source]) await loadSourceFilters();
+      else { state.filters=state.filterCache[state.source]; hydrateFilterControlsFromState(); }
+      if(state.source==="asem") await loadUpdatedAt();
       await loadCurrentView();
     });
   });
@@ -143,16 +160,20 @@ function bindAppEvents(){
 }
 
 async function loadSourceFilters(){
+  clearError();
+  if(state.filterCache[state.source]){state.filters=state.filterCache[state.source];hydrateFilterControlsFromState();return;}
   showLoading(true);
   try{
-    state.filters = await Api.request({action:"filters", source:state.source});
-    fillSelect("filterYear", state.filters.years);
-    updateMonths();
-    fillSelect("filterFlag", state.filters.flags);
-
-  }catch(err){ showError(err.message); }
-  finally{ showLoading(false); }
+    state.filters=await cachedApi("filters",{action:"filters",source:state.source},600000);
+    state.filterCache[state.source]=state.filters;
+    hydrateFilterControlsFromState();
+  }catch(err){showError(err.message);}finally{showLoading(false);}
 }
+function hydrateFilterControlsFromState(){
+  if(!state.filters)return;
+  fillSelect("filterYear",state.filters.years);updateMonths();fillSelect("filterFlag",state.filters.flags);
+}
+
 function updateMonths(){
   if(!state.filters) return;
   const y = valueOf("filterYear") || state.filters.years[0];
@@ -187,16 +208,13 @@ async function loadCurrentView(){
   try{
     let r;
     if(state.view === "headline"){
-      r = await Api.request({action:"headline", ...args});
+      r = await cachedApi("headline",{action:"headline", ...args},300000);
       renderStandard(r);
     }else if(state.view === "komoditas"){
-      r = await Api.request({
-        action:"commodity", ...args,
-        mode:valueOf("commodityMode")
-      });
+      r = await cachedApi("commodity",{action:"commodity", ...args,mode:valueOf("commodityMode")},300000);
       renderCommodity(r);
     }else{
-      r = await Api.request({action:"table", view:state.view, ...args});
+      r = await cachedApi("table",{action:"table",view:state.view,...args},300000);
       renderStandard(r);
     }
   }catch(err){ showError(err.message); }
@@ -232,14 +250,14 @@ function renderStandard(r){
   const table = document.getElementById("mainTable");
   table.innerHTML = "<thead><tr></tr></thead><tbody></tbody>";
   const tr = table.querySelector("thead tr");
-  r.columns.forEach(c => { const th=document.createElement("th"); th.textContent=c; tr.appendChild(th); });
+  r.columns.forEach((c,i)=>{const th=document.createElement("th");th.innerHTML=formatColumnTitle(c,i);tr.appendChild(th);});
 
   document.getElementById("tableTitle").textContent = r.title || viewTitle();
   document.getElementById("tableInfo").textContent = r.info || "";
 
   state.mainDt = $("#mainTable").DataTable({
     data:r.rows,
-    columns:r.columns.map((c,i)=>({data:i,title:c,render:renderCell})),
+    columns:r.columns.map((c,i)=>({data:i,title:formatColumnTitle(c,i),render:(data,type,row,meta)=>renderCell(data,type,row,meta),className:i>=2?"num-cell":""})),
     scrollX:true,pageLength:25,order:[],
     dom:"Bfrtip",
     buttons:[
@@ -329,14 +347,27 @@ function applyCommodityGlobalSearch(){
   });
 }
 
-function renderCell(data,type){
-  if(type!=="display") return data;
-  if(typeof data==="number"){
-    const cls=data>0?"positive":data<0?"negative":"";
-    return `<span class="${cls}">${data.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>`;
-  }
-  return data ?? "";
+function formatColumnTitle(label,index){
+  const text=String(label??"");
+  if(index<2)return escapeHtml(text);
+  const m=text.match(/^(\d+)\s*-\s*(.+)$/);
+  if(!m)return escapeHtml(text);
+  return `<span class="city-head-code">${escapeHtml(m[1])}</span><span class="city-head-name">${escapeHtml(m[2])}</span>`;
 }
+function renderCell(data,type,row,meta){
+  if(type!=="display")return data;
+  if(typeof data==="number"){
+    const formatted=data.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2});
+    let cls=data>0?"positive":data<0?"negative":"";
+    if(state.view==="inflasi"&&meta&&meta.col>=2&&Array.isArray(row)){
+      const nums=row.slice(2).filter(v=>typeof v==="number"&&Number.isFinite(v));
+      if(nums.length){const mx=Math.max(...nums),mn=Math.min(...nums);if(mx!==mn){if(data===mx)cls+=" row-max";if(data===mn)cls+=" row-min";}}
+    }
+    return `<span class="${cls.trim()}">${formatted}</span>`;
+  }
+  return data??"";
+}
+
 function exportTitle(){return `${state.source}-${viewTitle()}-${valueOf("filterYear")}-${valueOf("filterMonth")}`;}
 async function exportImage(id){
   const el=document.getElementById(id);
@@ -351,19 +382,20 @@ function showError(msg){const el=document.getElementById("errorBox");el.textCont
 function clearError(){document.getElementById("errorBox").classList.add("hidden");}
 
 async function loadUpdatedAt(){
-  if(state.source!=="asem") return;
+  if(state.source!=="asem")return;
   try{
-    const r=await Api.request({action:"getUpdatedAt"});
-    document.getElementById("dataUpdatedAt").textContent=r.display||"Belum diatur";
-    document.getElementById("updatedAtInput").value=r.inputValue||"";
+    if(state.updatedAtCache){document.getElementById("dataUpdatedAt").textContent=state.updatedAtCache.display||"Belum diatur";document.getElementById("updatedAtInput").value=state.updatedAtCache.inputValue||"";return;}
+    const r=await Api.request({action:"getUpdatedAt"});state.updatedAtCache=r;document.getElementById("dataUpdatedAt").textContent=r.display||"Belum diatur";document.getElementById("updatedAtInput").value=r.inputValue||"";
   }catch(_){}
 }
+
 async function saveUpdatedAt(){
   try{
     const value=document.getElementById("updatedAtInput").value;
     const token=sessionStorage.getItem("inflasi_token");
     const r=await Api.request({action:"setUpdatedAt",value,token});
     document.getElementById("dataUpdatedAt").textContent=r.display;
+    state.updatedAtCache=r;
     document.getElementById("updatedAtModal").classList.add("hidden");
   }catch(err){alert(err.message);}
 }
@@ -402,11 +434,11 @@ async function downloadCommodityPagePdf(){
 function getDownloadMeta(){
   const now=new Date();
   const source=state.source==="asem"?"Angka Sementara":"Angka Final Inflasi";
+  const sourcePeriod=state.source==="asem"?(document.getElementById("dataUpdatedAt")?.textContent||"Belum diatur"):"";
   const dateText=now.toLocaleDateString("id-ID",{day:"2-digit",month:"long",year:"numeric"});
   const timeText=now.toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).replace(/\./g,":");
-  const fileStamp=now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0")+"_"+
-    String(now.getHours()).padStart(2,"0")+String(now.getMinutes()).padStart(2,"0")+String(now.getSeconds()).padStart(2,"0");
-  return {source,dateText,timeText,fileStamp};
+  const fileStamp=now.getFullYear()+String(now.getMonth()+1).padStart(2,"0")+String(now.getDate()).padStart(2,"0")+"_"+String(now.getHours()).padStart(2,"0")+String(now.getMinutes()).padStart(2,"0")+String(now.getSeconds()).padStart(2,"0");
+  return {source,sourcePeriod,dateText,timeText,fileStamp};
 }
 
 function buildCommodityExportClone(){
@@ -419,7 +451,7 @@ function buildCommodityExportClone(){
   clone.querySelector(".commodity-search-wrap")?.remove();
   const header=document.createElement("div");
   header.className="export-report-header";
-  header.innerHTML=`<div class="export-brand-badge">IF</div><div class="export-head-copy"><div class="export-kicker">DASHBOARD MONITORING INFLASI</div><div class="export-main-title">${escapeHtml(viewTitle())}</div><div class="export-subtitle">${escapeHtml(meta.source)} • Tahun ${escapeHtml(valueOf("filterYear"))} • Bulan ${escapeHtml(valueOf("filterMonth"))} • Flag ${escapeHtml(valueOf("filterFlag"))}</div></div><div class="export-time-box"><span>Waktu Download</span><strong>${escapeHtml(meta.dateText)}</strong><strong>${escapeHtml(meta.timeText)}</strong></div>`;
+  header.innerHTML=`<div class="export-brand-badge">IF</div><div class="export-head-copy"><div class="export-kicker">DASHBOARD MONITORING INFLASI</div><div class="export-main-title">${escapeHtml(viewTitle())}</div><div class="export-subtitle">${escapeHtml(meta.source)}${meta.sourcePeriod ? ` • Data per ${escapeHtml(meta.sourcePeriod)}` : ""} • Tahun ${escapeHtml(valueOf("filterYear"))} • Bulan ${escapeHtml(valueOf("filterMonth"))} • Flag ${escapeHtml(valueOf("filterFlag"))}</div></div><div class="export-time-box"><span>Waktu Download</span><strong>${escapeHtml(meta.dateText)}</strong><strong>${escapeHtml(meta.timeText)}</strong></div>`;
   clone.insertBefore(header,clone.firstChild);
   const originalCities=[...document.querySelectorAll("#commodityAllCities .city-section")];
   const clonedCities=[...clone.querySelectorAll("#commodityAllCities .city-section")];
@@ -625,7 +657,7 @@ function commodityFlatRows(){
 
 function downloadCommodityCsv(){
   const meta=getDownloadMeta(),rows=commodityFlatRows();
-  const all=[["Jenis Data",meta.source],["Menu",viewTitle()],["Tahun",valueOf("filterYear")],["Bulan",valueOf("filterMonth")],["Flag",valueOf("filterFlag")],["Tanggal Download",meta.dateText],["Jam Download",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const all=[["Jenis Data",meta.source],["Data Per",meta.sourcePeriod||"-"],["Menu",viewTitle()],["Tahun",valueOf("filterYear")],["Bulan",valueOf("filterMonth")],["Flag",valueOf("filterFlag")],["Tanggal Download",meta.dateText],["Jam Download",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
   const csv=all.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n");
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),a=document.createElement("a"),url=URL.createObjectURL(blob);
   a.href=url;a.download=safeName(`${meta.source}-${viewTitle()}-${meta.fileStamp}`)+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),500);
@@ -635,7 +667,7 @@ function downloadCommodityWorkbook(){
   const meta=getDownloadMeta(),rows=commodityFlatRows();
   if(!rows.length){alert("Data komoditas belum tersedia.");return;}
   const wb=XLSX.utils.book_new();
-  const summary=[["JENIS DATA",meta.source],["MENU",viewTitle()],["TAHUN",valueOf("filterYear")],["BULAN",valueOf("filterMonth")],["FLAG",valueOf("filterFlag")],["TANGGAL DOWNLOAD",meta.dateText],["JAM DOWNLOAD",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
+  const summary=[["JENIS DATA",meta.source],["DATA PER",meta.sourcePeriod||"-"],["MENU",viewTitle()],["TAHUN",valueOf("filterYear")],["BULAN",valueOf("filterMonth")],["FLAG",valueOf("filterFlag")],["TANGGAL DOWNLOAD",meta.dateText],["JAM DOWNLOAD",meta.timeText],[],["Kode Kota","Nama Kota","Kelompok","No","Kode Komoditas","Nama Komoditas","Andil"],...rows];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),"Semua KabKota");
   (state.commodityData?.cities||[]).forEach(city=>{
     const arr=[[meta.source],[`Download: ${meta.dateText}, ${meta.timeText}`],[`${city.code} - ${city.name}`],[],["ANDIL TERENDAH"],["No","Kode Komoditas","Nama Komoditas","Andil"],...(city.lowest||[]).map(r=>[r[0],r[1],r[2],round2(r[3])]),[],["ANDIL TERTINGGI"],["No","Kode Komoditas","Nama Komoditas","Andil"],...(city.highest||[]).map(r=>[r[0],r[1],r[2],round2(r[3])])];

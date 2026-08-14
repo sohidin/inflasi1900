@@ -7,12 +7,13 @@ const CONFIG = {
 
   // Metadata filter disimpan 6 jam.
   FILTER_CACHE_SECONDS: 21600,
+  INDEX_CACHE_SECONDS: 21600,
 
   // Hasil tabel per kombinasi filter disimpan 10 menit.
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v8"
+  CACHE_VERSION: "v9"
 };
 
 function doGet(e) {
@@ -109,70 +110,18 @@ function sheet_(source) {
  * - Setelah blok ditemukan, hanya blok tersebut yang dibaca.
  * - Posisi blok tahun-bulan di-cache.
  */
-function getPeriodRows_(source, year, month) {
-  const cache = CacheService.getScriptCache();
-  const cacheKey = CONFIG.CACHE_VERSION + ":period:" + source + ":" + year + ":" + month;
-  const cached = cache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
+function getPeriodIndex_(source){
+  const cache=CacheService.getScriptCache(),key=CONFIG.CACHE_VERSION+":periodIndex:"+source,cached=cache.get(key);if(cached)return JSON.parse(cached);
+  const sh=sheet_(source).sh,lastRow=sh.getLastRow();if(lastRow<2)return {};const ym=sh.getRange(2,1,lastRow-1,2).getDisplayValues(),index={};
+  let ck=null,start=null,prev=null;const close=()=>{if(ck&&start!==null&&prev!==null){if(!index[ck])index[ck]=[];index[ck].push({start,count:prev-start+1});}};
+  for(let i=0;i<ym.length;i++){const y=clean_(ym[i][0]),m=clean_(ym[i][1]),row=i+2,k=y&&m?y+"|"+m:"";if(k!==ck||(prev!==null&&row!==prev+1)){close();ck=k;start=k?row:null;}prev=row;}close();
+  try{const txt=JSON.stringify(index);if(txt.length<95000)cache.put(key,txt,CONFIG.INDEX_CACHE_SECONDS);}catch(e){}return index;
+}
 
-  const obj = sheet_(source);
-  const sh = obj.sh;
-  const cfg = obj.cfg;
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return [];
-
-  /*
-   * DATA FINAL tersusun per blok Kode Kota.
-   * Contoh: seluruh periode 1900 selesai dahulu,
-   * lalu blok 1902 dimulai lagi dari periode awal.
-   *
-   * Karena itu TIDAK boleh berhenti setelah blok periode pertama.
-   * Kita scan A:C yang relatif ringan untuk menemukan semua baris
-   * dengan Tahun+Bulan yang diminta pada SELURUH kode kota.
-   */
-  const meta = sh.getRange(2, 1, lastRow - 1, 3).getDisplayValues();
-
-  const matchedRows = [];
-  for (let i = 0; i < meta.length; i++) {
-    if (clean_(meta[i][0]) === String(year) &&
-        clean_(meta[i][1]) === String(month)) {
-      matchedRows.push(i + 2);
-    }
-  }
-  if (!matchedRows.length) return [];
-
-  // Gabungkan nomor baris berurutan menjadi segmen supaya panggilan getRange sedikit.
-  const segments = [];
-  let start = matchedRows[0];
-  let prev = matchedRows[0];
-
-  for (let i = 1; i < matchedRows.length; i++) {
-    const cur = matchedRows[i];
-    if (cur === prev + 1) {
-      prev = cur;
-    } else {
-      segments.push({start:start, count:prev-start+1});
-      start = cur;
-      prev = cur;
-    }
-  }
-  segments.push({start:start, count:prev-start+1});
-
-  let rows = [];
-  segments.forEach(seg => {
-    const part = sh.getRange(seg.start, 1, seg.count, cfg.lastCol).getDisplayValues();
-    rows = rows.concat(part);
-  });
-
-  // Cache hanya jika ukurannya memungkinkan. Hasil pivot sendiri juga di-cache.
-  try {
-    const txt = JSON.stringify(rows);
-    if (txt.length < 95000) {
-      cache.put(cacheKey, txt, CONFIG.DATA_CACHE_SECONDS);
-    }
-  } catch (e) {}
-
-  return rows;
+function getPeriodRows_(source,year,month){
+  const cache=CacheService.getScriptCache(),key=CONFIG.CACHE_VERSION+":period:"+source+":"+year+":"+month,cached=cache.get(key);if(cached)return JSON.parse(cached);
+  const obj=sheet_(source),segments=getPeriodIndex_(source)[String(year)+"|"+String(month)]||[];if(!segments.length)return [];let rows=[];segments.forEach(seg=>rows=rows.concat(obj.sh.getRange(seg.start,1,seg.count,obj.cfg.lastCol).getDisplayValues()));
+  try{const txt=JSON.stringify(rows);if(txt.length<95000)cache.put(key,txt,CONFIG.DATA_CACHE_SECONDS);}catch(e){}return rows;
 }
 
 function getFilters_(source) {
