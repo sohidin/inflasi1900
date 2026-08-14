@@ -1,6 +1,6 @@
 const CONFIG = {
   // GANTI DENGAN URL WEB APP APPS SCRIPT SETELAH DEPLOY
-  API_URL: "https://script.google.com/macros/s/AKfycbzUtpImwSnQUWaEe_LgbPo2rj31TUwT0_l0rrlQDFcVGnahyx4iU9GxUPTKIzxu7w7i/exec"
+  API_URL: "PASTE_APPS_SCRIPT_WEB_APP_URL_HERE"
 };
 
 const state = {
@@ -317,6 +317,7 @@ function updateUI(){
   const asemHeadline=state.source==="asem" && state.view==="headline";
   document.getElementById("headlineCompareFilters")?.classList.toggle("hidden",!asemHeadline);
   document.getElementById("comparisonGroupHeader")?.classList.toggle("hidden",!asemHeadline);
+  document.getElementById("standardTableSection")?.classList.toggle("headline-comparison",asemHeadline);
 
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
   document.getElementById("statYear").textContent = valueOf("filterYear") || "-";

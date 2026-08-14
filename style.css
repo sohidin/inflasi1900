@@ -404,3 +404,48 @@ body{letter-spacing:-.01em}.num-cell{text-align:center!important;font-variant-nu
   .compare-filter-group{width:100%;flex-wrap:wrap}
   .compare-filter-fields{width:100%;flex-wrap:wrap}
 }
+
+
+/* ===== V10.1: precise grouped-header alignment =====
+   2 kolom identitas = 50% tabel.
+   Masing-masing kelompok Final/Sementara = 25% (3 kolom metrik).
+*/
+.comparison-group-header{
+  display:grid !important;
+  grid-template-columns:14% 36% 25% 25% !important;
+  width:100% !important;
+  box-sizing:border-box !important;
+}
+.comparison-spacer{
+  grid-column:1 / span 2 !important;
+}
+.comparison-final-band{
+  grid-column:3 !important;
+}
+.comparison-asem-band{
+  grid-column:4 !important;
+}
+
+/* Kunci proporsi tabel agar header grup dan kolom di bawahnya konsisten */
+body .headline-comparison #mainTable.dataTable thead th:nth-child(1),
+body .headline-comparison #mainTable.dataTable tbody td:nth-child(1){
+  width:14% !important;
+}
+body .headline-comparison #mainTable.dataTable thead th:nth-child(2),
+body .headline-comparison #mainTable.dataTable tbody td:nth-child(2){
+  width:36% !important;
+}
+body .headline-comparison #mainTable.dataTable thead th:nth-child(n+3),
+body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
+  width:8.3333% !important;
+}
+
+/* Khusus perbandingan Asem vs Final: label tepat di tengah 3 kolom */
+.comparison-band{
+  display:flex !important;
+  flex-direction:column;
+  align-items:center !important;
+  justify-content:center !important;
+  text-align:center !important;
+  box-sizing:border-box !important;
+}
