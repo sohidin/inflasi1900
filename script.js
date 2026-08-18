@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbyNCBvJk7j73-opXd0IKKU5C-n1gTOnjSiDnVbWtMx81wiXPU0w-aNDgC4Swm9vhuM/exec"
 };
 
 // ===========================================================================
@@ -254,6 +254,230 @@ function bindAppEvents() {
     const el = document.getElementById("commodityGlobalSearch");
     if (el) { el.value = ""; applyCommodityGlobalSearch(); el.focus(); }
   });
+
+  document.getElementById("downloadAllAsemBtn")?.addEventListener("click", () => {
+    downloadAllMainMenu("asem");
+  });
+  document.getElementById("downloadAllFinalBtn")?.addEventListener("click", () => {
+    downloadAllMainMenu("final");
+  });
+}
+
+
+// ===========================================================================
+// BULK EXCEL — SELURUH MENU UTAMA
+// ===========================================================================
+async function getBulkFilterSelection(source){
+  let filters=state.filterCache[source];
+
+  if(!filters){
+    filters=await cachedApi(
+      "filters",
+      {action:"filters",source},
+      10*60*1000
+    );
+    state.filterCache[source]=filters;
+  }
+
+  const currentYear=valueOf("filterYear");
+  const currentMonth=valueOf("filterMonth");
+  const currentFlag=valueOf("filterFlag");
+
+  const years=(filters.years||[]).map(String);
+  const year=years.includes(String(currentYear))
+    ? String(currentYear)
+    : String(years[0]||"");
+
+  const months=(filters.monthsByYear?.[year]||[]).map(String);
+  const month=months.includes(String(currentMonth))
+    ? String(currentMonth)
+    : String(months[0]||"");
+
+  const flags=(filters.flags||[]).map(String);
+  const flag=flags.includes(String(currentFlag))
+    ? String(currentFlag)
+    : String(flags[0]??"");
+
+  return {year,month,flag};
+}
+
+async function resolveBulkFinalComparison(asemYear,asemMonth){
+  // Jika dropdown pembanding sudah pernah diinisialisasi, hormati pilihan user.
+  const selectedYear=valueOf("compareFinalYear");
+  const selectedMonth=valueOf("compareFinalMonth");
+
+  if(selectedYear && selectedMonth){
+    return {finalYear:selectedYear,finalMonth:selectedMonth};
+  }
+
+  if(!state.finalFilterCache){
+    state.finalFilterCache=await cachedApi(
+      "filters",
+      {action:"filters",source:"final"},
+      10*60*1000
+    );
+  }
+
+  const f=state.finalFilterCache;
+  let targetYear=Number(asemYear);
+  let targetMonth=Number(asemMonth)-1;
+
+  if(targetMonth<1){
+    targetMonth=12;
+    targetYear-=1;
+  }
+
+  const years=(f.years||[]).map(String);
+  let finalYear=years.includes(String(targetYear))
+    ? String(targetYear)
+    : (years.includes(String(asemYear)) ? String(asemYear) : String(years[0]||""));
+
+  const months=(f.monthsByYear?.[finalYear]||[]).map(String);
+  let finalMonth=months.includes(String(targetMonth))
+    ? String(targetMonth)
+    : (months.includes(String(asemMonth)) ? String(asemMonth) : String(months[0]||""));
+
+  return {finalYear,finalMonth};
+}
+
+function excelColumnWidth(rows,colIndex,header){
+  let max=String(header||"").length;
+  const sampleLimit=Math.min(rows.length,250);
+  for(let i=0;i<sampleLimit;i++){
+    const value=rows[i]?.[colIndex];
+    const len=String(value??"").length;
+    if(len>max) max=len;
+  }
+  return Math.min(Math.max(max+2,10),42);
+}
+
+function addBulkSheetToWorkbook(wb,sheetData,meta){
+  const headerRow=9;
+  const rows=sheetData.rows||[];
+  const columns=sheetData.columns||[];
+
+  const aoa=[
+    ["DASHBOARD INFLASI 1900"],
+    ["Sumber",meta.sourceLabel],
+    ["Menu",sheetData.title||sheetData.name],
+    ["Tahun",meta.year],
+    ["Bulan",meta.month],
+    ["Flag",meta.flag],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    columns,
+    ...rows
+  ];
+
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+
+  // Lebar kolom adaptif, tetapi dibatasi agar file tetap ringan.
+  ws["!cols"]=columns.map((c,i)=>({
+    wch:excelColumnWidth(rows,i,c)
+  }));
+
+  if(columns.length && rows.length){
+    const lastCol=XLSX.utils.encode_col(columns.length-1);
+    ws["!autofilter"]={ref:`A${headerRow}:${lastCol}${headerRow+rows.length}`};
+  }
+
+  // Format angka menjadi dua desimal pada area data.
+  const range=XLSX.utils.decode_range(ws["!ref"]||"A1:A1");
+  for(let r=headerRow;r<=range.e.r;r++){
+    for(let c=0;c<=range.e.c;c++){
+      const addr=XLSX.utils.encode_cell({r,c});
+      const cell=ws[addr];
+      if(cell && cell.t==="n"){
+        cell.z="0.00";
+      }
+    }
+  }
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    safeBulkSheetName(sheetData.name)
+  );
+}
+
+function safeBulkSheetName(name){
+  return String(name||"Sheet")
+    .replace(/[\\/?*\[\]:]/g,"-")
+    .substring(0,31);
+}
+
+async function downloadAllMainMenu(source){
+  const btn=document.getElementById(
+    source==="asem" ? "downloadAllAsemBtn" : "downloadAllFinalBtn"
+  );
+  if(!btn) return;
+
+  const originalHtml=btn.innerHTML;
+  btn.disabled=true;
+  btn.classList.add("is-loading");
+  btn.innerHTML=`
+    <span class="bulk-download-icon">⌛</span>
+    <span><strong>Menyiapkan Excel...</strong><small>Mohon tunggu</small></span>`;
+
+  try{
+    const selection=await getBulkFilterSelection(source);
+
+    if(!selection.year || !selection.month || selection.flag===""){
+      throw new Error("Filter tahun, bulan, atau flag tidak tersedia.");
+    }
+
+    const params={
+      action:"bulkExport",
+      source,
+      year:selection.year,
+      month:selection.month,
+      flag:selection.flag
+    };
+
+    if(source==="asem"){
+      Object.assign(
+        params,
+        await resolveBulkFinalComparison(selection.year,selection.month)
+      );
+    }
+
+    // Sengaja tidak masuk responseCache browser:
+    // payload bulk besar dan hanya dibutuhkan saat user menekan tombol download.
+    const payload=await Api.request(params);
+
+    if(!payload.sheets || !payload.sheets.length){
+      throw new Error("Tidak ada data untuk dibuat menjadi workbook.");
+    }
+
+    const meta=getDownloadMeta();
+    const wb=XLSX.utils.book_new();
+
+    payload.sheets.forEach(sheetData=>{
+      addBulkSheetToWorkbook(wb,sheetData,{
+        sourceLabel:payload.sourceLabel,
+        year:payload.year,
+        month:payload.month,
+        flag:payload.flag,
+        dateText:meta.dateText,
+        timeText:meta.timeText
+      });
+    });
+
+    const label=source==="asem"
+      ? "Angka-Sementara-Semua-Menu"
+      : "Angka-Final-Inflasi-Semua-Menu";
+
+    XLSX.writeFile(
+      wb,
+      safeName(`${label}-${payload.year}-${payload.month}-${meta.fileStamp}`)+".xlsx"
+    );
+  }catch(err){
+    showError(err.message||String(err));
+  }finally{
+    btn.disabled=false;
+    btn.classList.remove("is-loading");
+    btn.innerHTML=originalHtml;
+  }
 }
 
 // ===========================================================================

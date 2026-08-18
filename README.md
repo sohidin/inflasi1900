@@ -209,3 +209,24 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
   - Final MtM/YtD/YoY,
   - Sementara MtM/YtD/YoY.
 - Jika seluruh nilai dalam satu kolom sama, kolom tidak diberi highlight agar tidak seluruhnya berwarna.
+
+
+## V10.14 — Download Semua Menu
+- Tambah tombol **Download Semua Sementara** di dalam menu utama Angka Sementara.
+- Tambah tombol **Download Semua Final** di dalam menu utama Angka Final Inflasi.
+- Masing-masing tombol menghasilkan satu file Excel dengan **10 sheet**:
+  - MtM - Inflasi
+  - MtM - Andil
+  - MtM - Komoditas
+  - YtD - Inflasi
+  - YtD - Andil
+  - YtD - Komoditas
+  - YoY - Inflasi
+  - YoY - Andil
+  - YoY - Komoditas
+  - Inflasi Asem / Inflasi Final
+- Jadi bila kedua tombol digunakan, akan diperoleh **2 file Excel terpisah**.
+- Komoditas pada bulk export memakai mode **semua** (seluruh andil negatif dan positif), bukan hanya Top 10.
+- Setiap sheet memuat metadata sumber, menu, tahun, bulan, flag, tanggal dan jam download.
+- Backend memakai **request-local period memo** sehingga blok data tahun-bulan yang sama hanya dibaca sekali selama proses bulk export.
+- Bulk export menggunakan satu request API per workbook, bukan 10 request browser terpisah.

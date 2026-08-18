@@ -13,8 +13,13 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10"
+  CACHE_VERSION: "v10.14"
 };
+
+// Cache lokal selama SATU eksekusi Apps Script.
+// Ini penting untuk bulk export: satu blok tahun-bulan hanya dibaca sekali,
+// lalu dipakai ulang oleh 10 sheet workbook.
+const REQUEST_PERIOD_ROWS_ = {};
 
 function doGet(e) {
   try {
@@ -28,6 +33,7 @@ function doGet(e) {
     else if (action === "headline") result = getHeadline_(p);
     else if (action === "headlineCompare") result = getHeadlineCompare_(p);
     else if (action === "commodity") result = getCommodity_(p);
+    else if (action === "bulkExport") result = getBulkExport_(p);
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
     else if (action === "clearCache") result = clearCache_(p.token);
@@ -120,9 +126,46 @@ function getPeriodIndex_(source){
 }
 
 function getPeriodRows_(source,year,month){
-  const cache=CacheService.getScriptCache(),key=CONFIG.CACHE_VERSION+":period:"+source+":"+year+":"+month,cached=cache.get(key);if(cached)return JSON.parse(cached);
-  const obj=sheet_(source),segments=getPeriodIndex_(source)[String(year)+"|"+String(month)]||[];if(!segments.length)return [];let rows=[];segments.forEach(seg=>rows=rows.concat(obj.sh.getRange(seg.start,1,seg.count,obj.cfg.lastCol).getDisplayValues()));
-  try{const txt=JSON.stringify(rows);if(txt.length<95000)cache.put(key,txt,CONFIG.DATA_CACHE_SECONDS);}catch(e){}return rows;
+  const memoKey=String(source)+"|"+String(year)+"|"+String(month);
+  if(Object.prototype.hasOwnProperty.call(REQUEST_PERIOD_ROWS_,memoKey)){
+    return REQUEST_PERIOD_ROWS_[memoKey];
+  }
+
+  const cache=CacheService.getScriptCache(),
+        key=CONFIG.CACHE_VERSION+":period:"+source+":"+year+":"+month,
+        cached=cache.get(key);
+
+  if(cached){
+    const parsed=JSON.parse(cached);
+    REQUEST_PERIOD_ROWS_[memoKey]=parsed;
+    return parsed;
+  }
+
+  const obj=sheet_(source),
+        segments=getPeriodIndex_(source)[String(year)+"|"+String(month)]||[];
+
+  if(!segments.length){
+    REQUEST_PERIOD_ROWS_[memoKey]=[];
+    return [];
+  }
+
+  let rows=[];
+  segments.forEach(seg=>{
+    rows=rows.concat(
+      obj.sh.getRange(seg.start,1,seg.count,obj.cfg.lastCol).getDisplayValues()
+    );
+  });
+
+  REQUEST_PERIOD_ROWS_[memoKey]=rows;
+
+  try{
+    const txt=JSON.stringify(rows);
+    if(txt.length<95000){
+      cache.put(key,txt,CONFIG.DATA_CACHE_SECONDS);
+    }
+  }catch(e){}
+
+  return rows;
 }
 
 function getFilters_(source) {
@@ -422,8 +465,15 @@ function getCommodity_(p) {
     const lows=city.items.filter(x=>x.value<0).sort((a,b)=>a.value-b.value);
     const highs=city.items.filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
 
-    const lowFinal=mode==="threshold"?lows.filter(x=>x.value<=-0.01):lows.slice(0,10);
-    const highFinal=mode==="threshold"?highs.filter(x=>x.value>=0.01):highs.slice(0,10);
+    const lowFinal =
+      mode==="all" ? lows :
+      mode==="threshold" ? lows.filter(x=>x.value<=-0.01) :
+      lows.slice(0,10);
+
+    const highFinal =
+      mode==="all" ? highs :
+      mode==="threshold" ? highs.filter(x=>x.value>=0.01) :
+      highs.slice(0,10);
 
     return {
       code:city.code,
@@ -436,6 +486,127 @@ function getCommodity_(p) {
   const result={cities:cities};
   cacheSmall_(key,result);
   return result;
+}
+
+
+function flattenCommodityForBulk_(commodityResult){
+  const rows=[];
+  (commodityResult.cities||[]).forEach(city=>{
+    (city.lowest||[]).forEach(r=>{
+      rows.push([
+        city.code,city.name,"Terendah",
+        r[0],r[1],r[2],r[3]
+      ]);
+    });
+    (city.highest||[]).forEach(r=>{
+      rows.push([
+        city.code,city.name,"Tertinggi",
+        r[0],r[1],r[2],r[3]
+      ]);
+    });
+  });
+
+  return {
+    columns:[
+      "Kode Kota","Nama Kota","Kelompok","No",
+      "Kode Komoditas","Nama Komoditas","Andil"
+    ],
+    rows:rows
+  };
+}
+
+function sheetPayload_(name,result){
+  return {
+    name:name,
+    title:result.title||name,
+    info:result.info||"",
+    columns:result.columns||[],
+    rows:result.rows||[]
+  };
+}
+
+function getBulkExport_(p){
+  const source=String(p.source||"");
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  const flag=String(p.flag||"");
+
+  if(source!=="asem" && source!=="final"){
+    throw new Error("Sumber bulk export tidak valid.");
+  }
+  if(!year||!month||flag===""){
+    throw new Error("Tahun, bulan, dan flag harus dipilih.");
+  }
+
+  // Warm-up satu kali. Setelah ini semua fungsi lain memakai REQUEST_PERIOD_ROWS_.
+  getPeriodRows_(source,year,month);
+
+  const sheets=[];
+  const periods=[
+    {key:"mtm",label:"MtM"},
+    {key:"ytd",label:"YtD"},
+    {key:"yoy",label:"YoY"}
+  ];
+
+  periods.forEach(period=>{
+    const inflasi=getPivotTable_({
+      source:source,period:period.key,view:"inflasi",
+      year:year,month:month,flag:flag
+    });
+    sheets.push(sheetPayload_(period.label+" - Inflasi",inflasi));
+
+    const andil=getPivotTable_({
+      source:source,period:period.key,view:"andil",
+      year:year,month:month,flag:flag
+    });
+    sheets.push(sheetPayload_(period.label+" - Andil",andil));
+
+    // Bulk berarti SEMUA komoditas positif/negatif, bukan hanya Top 10.
+    const commodity=getCommodity_({
+      source:source,period:period.key,
+      year:year,month:month,flag:flag,mode:"all"
+    });
+    const flat=flattenCommodityForBulk_(commodity);
+    sheets.push({
+      name:period.label+" - Komoditas",
+      title:"Komoditas Andil "+period.label,
+      info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month+" • Flag "+flag,
+      columns:flat.columns,
+      rows:flat.rows
+    });
+  });
+
+  if(source==="asem"){
+    const finalYear=String(p.finalYear||"");
+    const finalMonth=String(p.finalMonth||"");
+
+    if(finalYear && finalMonth){
+      const cmp=getHeadlineCompare_({
+        asemYear:year,asemMonth:month,
+        finalYear:finalYear,finalMonth:finalMonth
+      });
+      sheets.push(sheetPayload_("Inflasi Asem",cmp));
+    }else{
+      const headline=getHeadline_({
+        source:"asem",year:year,month:month
+      });
+      sheets.push(sheetPayload_("Inflasi Asem",headline));
+    }
+  }else{
+    const headline=getHeadline_({
+      source:"final",year:year,month:month
+    });
+    sheets.push(sheetPayload_("Inflasi Final",headline));
+  }
+
+  return {
+    source:source,
+    sourceLabel:sourceLabel_(source),
+    year:year,
+    month:month,
+    flag:flag,
+    sheets:sheets
+  };
 }
 
 function metricColumn_(c,period,view){
