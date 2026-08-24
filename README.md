@@ -304,3 +304,26 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Sticky header dan desain header biru tetap dipertahankan.
 - PDF/Image visual export mengikuti proporsi kolom baru.
 - Cache frontend dinaikkan menjadi `v=10.22`.
+
+
+## V10.23 — Dashboard
+- Menu `Dashboard` ditambahkan paling atas dan menjadi halaman pertama setelah login.
+- Dashboard memakai endpoint ringkas `dashboardSeries`, jadi tabel besar tidak dimuat saat login.
+- Dashboard menampilkan:
+  - periode Final terbaru,
+  - MtM terbaru,
+  - YtD terbaru,
+  - YoY terbaru,
+  - perubahan MtM vs bulan sebelumnya,
+  - MtM tertinggi/terendah tahun terpilih.
+- Grafik series Angka Final: MtM, YtD, YoY per bulan.
+- Filter grafik:
+  - Tahun
+  - Wilayah
+- Download grafik:
+  - Image (PNG)
+  - PDF
+  - Excel
+- Grafik dibuat dengan SVG native tanpa menambah library chart baru agar loading tetap ringan.
+- Backend series memanfaatkan `getHeadline_` dan cache periode yang sudah ada.
+- `Code.gs` berubah dan harus di-deploy sebagai New version.

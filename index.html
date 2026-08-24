@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.22">
+  <link rel="stylesheet" href="style.css?v=10.23">
 </head>
 <body>
   <!-- LOGIN -->
@@ -52,6 +52,12 @@
       </div>
 
       <div class="menu-root">
+        <div class="menu-caption dashboard-caption">UTAMA</div>
+        <button id="dashboardMenuBtn" class="dashboard-menu-btn active" type="button">
+          <span class="dashboard-menu-icon">⌂</span>
+          <span>Dashboard</span>
+        </button>
+
         <div class="menu-caption">DATA SEMENTARA</div>
         <button class="menu-main" data-menu="asem">
           <span class="menu-label"><span class="menu-icon">◫</span>Angka Sementara</span>
@@ -154,7 +160,115 @@
         </div>
       </header>
 
-      <section class="stats-strip">
+      <section id="dashboardSection" class="dashboard-page">
+        <div class="dashboard-welcome-card">
+          <div class="dashboard-welcome-copy">
+            <span class="dashboard-kicker">RINGKASAN DATA INFLASI</span>
+            <h2>Dashboard Inflasi Bangka Belitung</h2>
+            <p>Ringkasan angka final dan perkembangan inflasi bulanan dalam satu tampilan.</p>
+          </div>
+          <div class="dashboard-control-panel">
+            <div class="dashboard-control">
+              <label>Tahun</label>
+              <select id="dashboardYear"></select>
+            </div>
+            <div class="dashboard-control dashboard-control-city">
+              <label>Wilayah</label>
+              <select id="dashboardCity"></select>
+            </div>
+            <button id="dashboardApplyBtn" class="btn btn-primary dashboard-apply-btn">Tampilkan</button>
+          </div>
+        </div>
+
+        <div class="dashboard-kpi-grid">
+          <article class="dashboard-kpi kpi-period">
+            <span>Periode Final Terbaru</span>
+            <strong id="dashLatestPeriod">-</strong>
+            <small id="dashCityLabel">-</small>
+          </article>
+          <article class="dashboard-kpi kpi-mtm">
+            <span>Inflasi MtM</span>
+            <strong id="dashLatestMtm">-</strong>
+            <small>bulan terbaru</small>
+          </article>
+          <article class="dashboard-kpi kpi-ytd">
+            <span>Inflasi YtD</span>
+            <strong id="dashLatestYtd">-</strong>
+            <small>tahun berjalan</small>
+          </article>
+          <article class="dashboard-kpi kpi-yoy">
+            <span>Inflasi YoY</span>
+            <strong id="dashLatestYoy">-</strong>
+            <small>tahun ke tahun</small>
+          </article>
+          <article class="dashboard-kpi kpi-delta">
+            <span>Perubahan MtM</span>
+            <strong id="dashMtmDelta">-</strong>
+            <small>vs bulan sebelumnya</small>
+          </article>
+        </div>
+
+        <div class="dashboard-main-grid">
+          <article id="dashboardChartCard" class="dashboard-chart-card">
+            <div class="dashboard-card-head">
+              <div>
+                <span class="eyebrow">SERIES ANGKA FINAL</span>
+                <h3>Perkembangan Inflasi Final</h3>
+                <p id="dashboardChartSubtitle">MtM, YtD, dan YoY per bulan</p>
+              </div>
+              <div class="dashboard-chart-actions">
+                <button id="downloadDashboardImage" class="btn">Image</button>
+                <button id="downloadDashboardPdf" class="btn">PDF</button>
+                <button id="downloadDashboardExcel" class="btn btn-primary">Excel</button>
+              </div>
+            </div>
+
+            <div class="dashboard-legend">
+              <span><i class="legend-dot legend-mtm"></i>MtM</span>
+              <span><i class="legend-dot legend-ytd"></i>YtD</span>
+              <span><i class="legend-dot legend-yoy"></i>YoY</span>
+            </div>
+
+            <div class="dashboard-chart-wrap">
+              <svg id="finalSeriesChart" class="final-series-chart"
+                   viewBox="0 0 1100 430"
+                   preserveAspectRatio="xMidYMid meet"
+                   role="img"
+                   aria-label="Grafik series inflasi final"></svg>
+            </div>
+          </article>
+
+          <aside class="dashboard-insight-card">
+            <div>
+              <span class="eyebrow">SOROTAN SERIES</span>
+              <h3>Insight Tahun Terpilih</h3>
+            </div>
+
+            <div class="insight-row">
+              <span>MtM Tertinggi</span>
+              <strong id="dashMaxMtm">-</strong>
+              <small id="dashMaxMtmMonth">-</small>
+            </div>
+            <div class="insight-row">
+              <span>MtM Terendah</span>
+              <strong id="dashMinMtm">-</strong>
+              <small id="dashMinMtmMonth">-</small>
+            </div>
+            <div class="insight-row">
+              <span>YoY Terbaru</span>
+              <strong id="dashInsightYoy">-</strong>
+              <small id="dashInsightYoyPeriod">-</small>
+            </div>
+
+            <div class="dashboard-note">
+              <span>ℹ</span>
+              <p>Series menggunakan <b>Angka Final</b> untuk wilayah dan tahun yang dipilih. Grafik hanya memuat bulan yang tersedia pada spreadsheet.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="statsStrip" class="stats-strip">
         <div class="mini-card">
           <span>Sumber</span>
           <strong id="statSource">Angka Sementara</strong>
@@ -173,7 +287,7 @@
         </div>
       </section>
 
-      <section class="filter-card">
+      <section id="filterCard" class="filter-card">
         <div class="filter-item">
           <label>Tahun</label>
           <select id="filterYear"></select>
@@ -309,6 +423,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.22"></script>
+  <script src="script.js?v=10.23"></script>
 </body>
 </html>

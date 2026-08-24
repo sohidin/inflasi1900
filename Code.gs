@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.14"
+  CACHE_VERSION: "v10.23"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -34,6 +34,7 @@ function doGet(e) {
     else if (action === "headlineCompare") result = getHeadlineCompare_(p);
     else if (action === "commodity") result = getCommodity_(p);
     else if (action === "bulkExport") result = getBulkExport_(p);
+    else if (action === "dashboardSeries") result = getDashboardSeries_(p);
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
     else if (action === "clearCache") result = clearCache_(p.token);
@@ -284,6 +285,101 @@ function getPivotTable_(p) {
 
   cacheSmall_(key,result);
   return result;
+}
+
+
+function getDashboardSeries_(p) {
+  const filters = getFilters_("final");
+  const requestedYear = String(p.year || "");
+  const year = requestedYear && (filters.years || []).indexOf(requestedYear) >= 0
+    ? requestedYear
+    : String((filters.years || [])[0] || "");
+
+  if (!year) throw new Error("Data tahun Angka Final belum tersedia.");
+
+  function normCode_(v) {
+    const x = clean_(v);
+    return (x === "19" || x === "1900") ? "1900" : x;
+  }
+
+  const cityMap = {};
+  (filters.cities || []).forEach(c => {
+    const code = normCode_(c.code);
+    if (!code) return;
+    cityMap[code] = c.name || code;
+  });
+
+  const preferredCodes = ["1900","1902","1903","1906","1971"];
+  const cityList = [];
+  preferredCodes.forEach(code => {
+    if (cityMap[code]) cityList.push({code:code,name:cityMap[code]});
+  });
+  Object.keys(cityMap)
+    .filter(code => preferredCodes.indexOf(code) === -1)
+    .sort(numericSort_)
+    .forEach(code => cityList.push({code:code,name:cityMap[code]}));
+
+  let cityCode = normCode_(p.cityCode);
+  if (!cityCode || !cityMap[cityCode]) {
+    cityCode = cityMap["1900"] ? "1900" : String((cityList[0] || {}).code || "");
+  }
+  if (!cityCode) throw new Error("Wilayah Angka Final tidak tersedia.");
+
+  const months = ((filters.monthsByYear || {})[year] || [])
+    .slice()
+    .sort(numericSort_);
+
+  const series = [];
+  months.forEach(month => {
+    const headline = getHeadline_({source:"final",year:year,month:String(month)});
+    const row = (headline.rows || []).find(r => normCode_(r[0]) === cityCode);
+    if (!row) return;
+    series.push({
+      month:String(month),
+      mtm:row[2],
+      ytd:row[3],
+      yoy:row[4]
+    });
+  });
+
+  const available = series.filter(x =>
+    x.mtm !== null || x.ytd !== null || x.yoy !== null
+  );
+
+  const latest = available.length ? available[available.length - 1] : null;
+  const previous = available.length > 1 ? available[available.length - 2] : null;
+
+  function metricSummary_(metric) {
+    const vals = available
+      .filter(x => x[metric] !== null && x[metric] !== undefined && !isNaN(Number(x[metric])))
+      .map(x => ({month:x.month,value:Number(x[metric])}));
+    if (!vals.length) return {max:null,min:null,maxMonth:"",minMonth:""};
+    let max = vals[0], min = vals[0];
+    vals.forEach(x => {
+      if (x.value > max.value) max = x;
+      if (x.value < min.value) min = x;
+    });
+    return {
+      max:max.value,
+      min:min.value,
+      maxMonth:max.month,
+      minMonth:min.month
+    };
+  }
+
+  return {
+    year:year,
+    cityCode:cityCode,
+    cityName:cityMap[cityCode] || cityCode,
+    cities:cityList,
+    years:filters.years || [],
+    series:series,
+    latest:latest,
+    previous:previous,
+    mtmSummary:metricSummary_("mtm"),
+    ytdSummary:metricSummary_("ytd"),
+    yoySummary:metricSummary_("yoy")
+  };
 }
 
 function getHeadline_(p) {

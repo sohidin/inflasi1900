@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbwzs6l3zxXMUN2XGzRDtPKK85PT7vr9yHJIc5OxR3Pr-cyDtWDUixaIdPpYXTlYvfUF/exec"
 };
 
 // ===========================================================================
@@ -21,6 +21,8 @@ const state = {
   finalFilterCache: null,
   comparisonData: null,
   finalHeadlineData: null,
+  dashboardData: null,
+  dashboardFilterCache: null,
   pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 
   // [OPT-1] Prefetch queue — menyimpan permintaan filter/data yang sedang berjalan
@@ -125,9 +127,13 @@ async function showApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("appPage").classList.remove("hidden");
 
-  // [OPT-4] Jalankan filter + updatedAt secara paralel, bukan berurutan.
-  await Promise.all([loadSourceFilters(), loadUpdatedAt()]);
-  await loadCurrentView();
+  state.view = "dashboard";
+  state.source = "final";
+  document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
+  document.getElementById("dashboardMenuBtn")?.classList.add("active");
+
+  // Dashboard memakai endpoint ringkas sendiri; tabel besar tidak dimuat saat login.
+  await loadDashboard();
 }
 
 // ===========================================================================
@@ -160,6 +166,18 @@ function bindAccordion() {
   if (!menuRoot) return;
 
   menuRoot.addEventListener("click", e => {
+    const dashboardBtn = e.target.closest("#dashboardMenuBtn");
+    if (dashboardBtn) {
+      document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".submenu").forEach(x => x.classList.remove("open"));
+      document.querySelectorAll(".menu-main").forEach(x => x.classList.remove("open"));
+      dashboardBtn.classList.add("active");
+      state.view = "dashboard";
+      state.source = "final";
+      loadDashboard();
+      return;
+    }
+
     // ---- menu-main (level 1) ----
     const menuBtn = e.target.closest(".menu-main");
     if (menuBtn) {
@@ -193,6 +211,7 @@ function bindAccordion() {
 }
 
 async function handleLeafClick(btn) {
+  document.getElementById("dashboardMenuBtn")?.classList.remove("active");
   document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
   btn.classList.add("active");
 
@@ -263,6 +282,14 @@ function bindAppEvents() {
   document.getElementById("downloadAllFinalBtn")?.addEventListener("click", () => {
     downloadAllMainMenu("final");
   });
+
+  document.getElementById("dashboardApplyBtn")?.addEventListener("click", loadDashboard);
+  document.getElementById("dashboardYear")?.addEventListener("change", loadDashboard);
+  document.getElementById("dashboardCity")?.addEventListener("change", loadDashboard);
+
+  document.getElementById("downloadDashboardImage")?.addEventListener("click", downloadDashboardImage);
+  document.getElementById("downloadDashboardPdf")?.addEventListener("click", downloadDashboardPdf);
+  document.getElementById("downloadDashboardExcel")?.addEventListener("click", downloadDashboardExcel);
 }
 
 
@@ -482,6 +509,402 @@ async function downloadAllMainMenu(source){
   }
 }
 
+
+// ===========================================================================
+// DASHBOARD
+// ===========================================================================
+const DASH_MONTHS = {
+  "1":"Jan","2":"Feb","3":"Mar","4":"Apr","5":"Mei","6":"Jun",
+  "7":"Jul","8":"Agu","9":"Sep","10":"Okt","11":"Nov","12":"Des"
+};
+
+function setDashboardLayout(active) {
+  document.getElementById("dashboardSection")?.classList.toggle("hidden", !active);
+  document.getElementById("statsStrip")?.classList.toggle("hidden", active);
+  document.getElementById("filterCard")?.classList.toggle("hidden", active);
+
+  if (active) {
+    cleanupStandardTableUi();
+    document.getElementById("standardTableSection")?.classList.add("hidden");
+    document.getElementById("commoditySection")?.classList.add("hidden");
+    document.getElementById("updateCard")?.classList.add("hidden");
+    document.getElementById("pageTitle").textContent = "Dashboard";
+    document.getElementById("pageSubtitle").textContent =
+      "Ringkasan dan series Inflasi Final Bangka Belitung";
+  } else {
+    document.getElementById("standardTableSection")?.classList.remove("hidden");
+  }
+}
+
+async function ensureDashboardFilters() {
+  if (state.dashboardFilterCache) return state.dashboardFilterCache;
+  state.dashboardFilterCache = await cachedApi(
+    "dashboardFinalFilters",
+    {action:"filters",source:"final"},
+    10 * 60 * 1000
+  );
+  return state.dashboardFilterCache;
+}
+
+function hydrateDashboardFilterControls(filters) {
+  const yearEl = document.getElementById("dashboardYear");
+  const cityEl = document.getElementById("dashboardCity");
+  if (!yearEl || !cityEl || !filters) return;
+
+  const oldYear = yearEl.value;
+  fillSelect("dashboardYear", filters.years || []);
+  if (oldYear && [...yearEl.options].some(o => o.value === oldYear)) {
+    yearEl.value = oldYear;
+  }
+
+  const oldCity = cityEl.value;
+  const cityMap = new Map();
+  (filters.cities || []).forEach(c => {
+    let code = String(c.code || "");
+    if (code === "19") code = "1900";
+    if (!cityMap.has(code)) cityMap.set(code, c.name || code);
+  });
+
+  const preferred = ["1900","1902","1903","1906","1971"];
+  const cityOptions = [];
+  preferred.forEach(code => {
+    if (cityMap.has(code)) {
+      cityOptions.push({
+        value:code,
+        label:`${code} - ${cityMap.get(code)}`
+      });
+    }
+  });
+  [...cityMap.keys()]
+    .filter(code => !preferred.includes(code))
+    .sort((a,b) => Number(a)-Number(b))
+    .forEach(code => cityOptions.push({
+      value:code,
+      label:`${code} - ${cityMap.get(code)}`
+    }));
+
+  fillSelect("dashboardCity", cityOptions);
+  if (oldCity && [...cityEl.options].some(o => o.value === oldCity)) {
+    cityEl.value = oldCity;
+  } else if ([...cityEl.options].some(o => o.value === "1900")) {
+    cityEl.value = "1900";
+  }
+}
+
+async function loadDashboard() {
+  state.view = "dashboard";
+  state.source = "final";
+  setDashboardLayout(true);
+  clearError();
+  showLoading(true);
+
+  try {
+    const filters = await ensureDashboardFilters();
+    hydrateDashboardFilterControls(filters);
+
+    const year = valueOf("dashboardYear") || String((filters.years || [])[0] || "");
+    const cityCode = valueOf("dashboardCity") || "1900";
+
+    const r = await cachedApi(
+      "dashboardSeries",
+      {action:"dashboardSeries",year,cityCode},
+      10 * 60 * 1000
+    );
+
+    state.dashboardData = r;
+
+    // Backend may normalise city/year; sync controls without re-fetch.
+    if ([...document.getElementById("dashboardYear").options].some(o => o.value === String(r.year))) {
+      document.getElementById("dashboardYear").value = String(r.year);
+    }
+    if ([...document.getElementById("dashboardCity").options].some(o => o.value === String(r.cityCode))) {
+      document.getElementById("dashboardCity").value = String(r.cityCode);
+    }
+
+    renderDashboard(r);
+  } catch (err) {
+    showError(err.message || String(err));
+  } finally {
+    showLoading(false);
+  }
+}
+
+function dashboardNumber(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "-";
+  return n.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function dashboardSigned(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "-";
+  const prefix = n > 0 ? "+" : "";
+  return prefix + n.toLocaleString("id-ID",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function monthLabel(m, year="") {
+  return `${DASH_MONTHS[String(m)] || m}${year ? " " + year : ""}`;
+}
+
+function renderDashboard(r) {
+  const latest = r.latest || {};
+  const previous = r.previous || {};
+  const hasLatest = latest.month !== undefined;
+
+  document.getElementById("dashLatestPeriod").textContent =
+    hasLatest ? monthLabel(latest.month,r.year) : "-";
+  document.getElementById("dashCityLabel").textContent =
+    `${r.cityCode} • ${r.cityName}`;
+
+  document.getElementById("dashLatestMtm").textContent = dashboardNumber(latest.mtm);
+  document.getElementById("dashLatestYtd").textContent = dashboardNumber(latest.ytd);
+  document.getElementById("dashLatestYoy").textContent = dashboardNumber(latest.yoy);
+
+  const delta = Number(latest.mtm) - Number(previous.mtm);
+  document.getElementById("dashMtmDelta").textContent =
+    Number.isFinite(delta) ? dashboardSigned(delta) : "-";
+
+  const ms = r.mtmSummary || {};
+  document.getElementById("dashMaxMtm").textContent = dashboardNumber(ms.max);
+  document.getElementById("dashMaxMtmMonth").textContent =
+    ms.maxMonth ? monthLabel(ms.maxMonth,r.year) : "-";
+  document.getElementById("dashMinMtm").textContent = dashboardNumber(ms.min);
+  document.getElementById("dashMinMtmMonth").textContent =
+    ms.minMonth ? monthLabel(ms.minMonth,r.year) : "-";
+
+  document.getElementById("dashInsightYoy").textContent = dashboardNumber(latest.yoy);
+  document.getElementById("dashInsightYoyPeriod").textContent =
+    hasLatest ? monthLabel(latest.month,r.year) : "-";
+
+  document.getElementById("dashboardChartSubtitle").textContent =
+    `${r.cityCode} • ${r.cityName} • Tahun ${r.year}`;
+
+  drawFinalSeriesChart(r.series || [], r.year);
+}
+
+function svgNode(tag, attrs={}, text="") {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,String(v)));
+  if (text !== "") el.textContent = text;
+  return el;
+}
+
+function drawFinalSeriesChart(series, year) {
+  const svg = document.getElementById("finalSeriesChart");
+  if (!svg) return;
+  svg.innerHTML = "";
+
+  const W=1100, H=430;
+  const margin={left:72,right:32,top:28,bottom:58};
+  const pw=W-margin.left-margin.right;
+  const ph=H-margin.top-margin.bottom;
+
+  const metrics = [
+    {key:"mtm", label:"MtM", color:"#078bd3"},
+    {key:"ytd", label:"YtD", color:"#08a685"},
+    {key:"yoy", label:"YoY", color:"#7657d6"}
+  ];
+
+  const allVals=[];
+  (series||[]).forEach(d=>{
+    metrics.forEach(m=>{
+      const n=Number(d[m.key]);
+      if(Number.isFinite(n)) allVals.push(n);
+    });
+  });
+
+  if(!series.length || !allVals.length){
+    svg.appendChild(svgNode("text",{
+      x:W/2,y:H/2,"text-anchor":"middle",
+      fill:"#70869a","font-size":"18","font-weight":"700"
+    },"Data series belum tersedia"));
+    return;
+  }
+
+  let min=Math.min(...allVals), max=Math.max(...allVals);
+  if(min===max){ min-=1; max+=1; }
+  const pad=Math.max((max-min)*0.12,0.25);
+  min-=pad; max+=pad;
+
+  const x=i => margin.left + (series.length===1 ? pw/2 : (i/(series.length-1))*pw);
+  const y=v => margin.top + ((max-v)/(max-min))*ph;
+
+  // plot background
+  svg.appendChild(svgNode("rect",{
+    x:margin.left,y:margin.top,width:pw,height:ph,
+    rx:14,fill:"#fbfdff"
+  }));
+
+  // horizontal grid + labels
+  const ticks=5;
+  for(let i=0;i<=ticks;i++){
+    const value=max-(i/ticks)*(max-min);
+    const yy=y(value);
+    svg.appendChild(svgNode("line",{
+      x1:margin.left,y1:yy,x2:W-margin.right,y2:yy,
+      stroke:"#dce8f0","stroke-width":"1"
+    }));
+    svg.appendChild(svgNode("text",{
+      x:margin.left-12,y:yy+4,"text-anchor":"end",
+      fill:"#71879a","font-size":"12","font-weight":"650"
+    },dashboardNumber(value)));
+  }
+
+  // zero line
+  if(min<=0 && max>=0){
+    const zy=y(0);
+    svg.appendChild(svgNode("line",{
+      x1:margin.left,y1:zy,x2:W-margin.right,y2:zy,
+      stroke:"#8aa3b6","stroke-width":"1.5","stroke-dasharray":"5 5"
+    }));
+  }
+
+  // x labels
+  series.forEach((d,i)=>{
+    svg.appendChild(svgNode("text",{
+      x:x(i),y:H-27,"text-anchor":"middle",
+      fill:"#587085","font-size":"12","font-weight":"750"
+    },DASH_MONTHS[String(d.month)]||String(d.month)));
+  });
+
+  // lines and points
+  metrics.forEach(metric=>{
+    const valid=series.map((d,i)=>({
+      i, value:Number(d[metric.key]), month:d.month
+    })).filter(p=>Number.isFinite(p.value));
+
+    if(!valid.length) return;
+
+    const points=valid.map(p=>`${x(p.i)},${y(p.value)}`).join(" ");
+    svg.appendChild(svgNode("polyline",{
+      points,fill:"none",stroke:metric.color,
+      "stroke-width":"3.4","stroke-linecap":"round","stroke-linejoin":"round"
+    }));
+
+    valid.forEach(p=>{
+      const circle=svgNode("circle",{
+        cx:x(p.i),cy:y(p.value),r:5.2,
+        fill:"#fff",stroke:metric.color,"stroke-width":"3"
+      });
+      circle.appendChild(svgNode("title",{},
+        `${metric.label} • ${monthLabel(p.month,year)}: ${dashboardNumber(p.value)}`
+      ));
+      svg.appendChild(circle);
+    });
+  });
+}
+
+function dashboardExportName(ext) {
+  const r = state.dashboardData || {};
+  const meta=getDownloadMeta();
+  return safeName(
+    `Series Inflasi Final-${r.cityCode || "wilayah"}-${r.year || "tahun"}-${meta.fileStamp}`
+  ) + "." + ext;
+}
+
+async function dashboardChartCanvas() {
+  const card=document.getElementById("dashboardChartCard");
+  if(!card) throw new Error("Grafik dashboard belum tersedia.");
+
+  const clone=card.cloneNode(true);
+  clone.id="dashboardChartExportClone";
+  clone.classList.add("dashboard-chart-export-clone");
+  clone.querySelector(".dashboard-chart-actions")?.remove();
+
+  clone.style.position="fixed";
+  clone.style.left="-20000px";
+  clone.style.top="0";
+  clone.style.width="1350px";
+  clone.style.maxWidth="1350px";
+  clone.style.background="#fff";
+  clone.style.padding="24px";
+
+  document.body.appendChild(clone);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+  try{
+    return await html2canvas(clone,{
+      backgroundColor:"#ffffff",
+      scale:1.35,
+      useCORS:true,
+      logging:false,
+      width:clone.scrollWidth,
+      height:clone.scrollHeight,
+      windowWidth:1450,
+      windowHeight:clone.scrollHeight+80
+    });
+  }finally{
+    clone.remove();
+  }
+}
+
+async function downloadDashboardImage() {
+  try{
+    const canvas=await dashboardChartCanvas();
+    const a=document.createElement("a");
+    a.download=dashboardExportName("png");
+    a.href=canvas.toDataURL("image/png");
+    a.click();
+  }catch(err){ showError(err.message||String(err)); }
+}
+
+async function downloadDashboardPdf() {
+  try{
+    const canvas=await dashboardChartCanvas();
+    const pageW=841.89,pageH=595.28,margin=24;
+    const usableW=pageW-margin*2,usableH=pageH-margin*2;
+    let width=usableW;
+    let height=width*(canvas.height/canvas.width);
+    if(height>usableH){
+      const scale=usableH/height;
+      height*=scale; width*=scale;
+    }
+    pdfMake.createPdf({
+      pageSize:"A4",
+      pageOrientation:"landscape",
+      pageMargins:[margin,margin,margin,margin],
+      content:[{image:canvas.toDataURL("image/png"),width,alignment:"center"}],
+      info:{title:"Series Inflasi Final"}
+    }).download(dashboardExportName("pdf"));
+  }catch(err){ showError(err.message||String(err)); }
+}
+
+function downloadDashboardExcel() {
+  const r=state.dashboardData;
+  if(!r || !r.series) return showError("Data dashboard belum tersedia.");
+
+  const meta=getDownloadMeta();
+  const rows=[
+    ["SERIES INFLASI FINAL"],
+    ["Wilayah",`${r.cityCode} - ${r.cityName}`],
+    ["Tahun",r.year],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    ["Bulan","MtM","YtD","YoY"],
+    ...r.series.map(x=>[
+      monthLabel(x.month),
+      round2(x.mtm),round2(x.ytd),round2(x.yoy)
+    ])
+  ];
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=[{wch:18},{wch:14},{wch:14},{wch:14}];
+
+  // Format data series menjadi dua desimal.
+  const ref=XLSX.utils.decode_range(ws["!ref"]||"A1:A1");
+  for(let rr=7;rr<=ref.e.r;rr++){
+    for(let cc=1;cc<=3;cc++){
+      const cell=ws[XLSX.utils.encode_cell({r:rr,c:cc})];
+      if(cell && cell.t==="n") cell.z="0.00";
+    }
+  }
+
+  XLSX.utils.book_append_sheet(wb,ws,"Series Final");
+  XLSX.writeFile(wb,dashboardExportName("xlsx"));
+}
+
 // ===========================================================================
 // FILTER
 // ===========================================================================
@@ -628,6 +1051,12 @@ async function loadCurrentView() {
 // UI HELPERS
 // ===========================================================================
 function updateUI() {
+  if(state.view === "dashboard"){
+    setDashboardLayout(true);
+    return;
+  }
+
+  setDashboardLayout(false);
   const title = viewTitle();
   document.getElementById("pageTitle").textContent = title;
   document.getElementById("pageSubtitle").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final Inflasi";
