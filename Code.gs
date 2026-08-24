@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.23"
+  CACHE_VERSION: "v10.24"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -329,20 +329,38 @@ function getDashboardSeries_(p) {
     .slice()
     .sort(numericSort_);
 
-  const series = [];
+  const selectedSeries = [];
+  const citySeriesMap = {};
+  cityList.forEach(c => citySeriesMap[c.code] = []);
+
   months.forEach(month => {
+    // One headline call per month gives ALL cities; cache period/headline is reused.
     const headline = getHeadline_({source:"final",year:year,month:String(month)});
-    const row = (headline.rows || []).find(r => normCode_(r[0]) === cityCode);
-    if (!row) return;
-    series.push({
-      month:String(month),
-      mtm:row[2],
-      ytd:row[3],
-      yoy:row[4]
+
+    (headline.rows || []).forEach(r => {
+      const code = normCode_(r[0]);
+      if (!citySeriesMap[code]) return;
+
+      citySeriesMap[code].push({
+        month:String(month),
+        mtm:r[2],
+        ytd:r[3],
+        yoy:r[4]
+      });
     });
+
+    const selectedRow = (headline.rows || []).find(r => normCode_(r[0]) === cityCode);
+    if (selectedRow) {
+      selectedSeries.push({
+        month:String(month),
+        mtm:selectedRow[2],
+        ytd:selectedRow[3],
+        yoy:selectedRow[4]
+      });
+    }
   });
 
-  const available = series.filter(x =>
+  const available = selectedSeries.filter(x =>
     x.mtm !== null || x.ytd !== null || x.yoy !== null
   );
 
@@ -367,13 +385,20 @@ function getDashboardSeries_(p) {
     };
   }
 
+  const comparisonSeries = cityList.map(c => ({
+    code:c.code,
+    name:c.name,
+    series:citySeriesMap[c.code] || []
+  }));
+
   return {
     year:year,
     cityCode:cityCode,
     cityName:cityMap[cityCode] || cityCode,
     cities:cityList,
     years:filters.years || [],
-    series:series,
+    series:selectedSeries,
+    comparisonSeries:comparisonSeries,
     latest:latest,
     previous:previous,
     mtmSummary:metricSummary_("mtm"),

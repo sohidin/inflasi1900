@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.23">
+  <link rel="stylesheet" href="style.css?v=10.24">
 </head>
 <body>
   <!-- LOGIN -->
@@ -266,6 +266,77 @@
             </div>
           </aside>
         </div>
+
+        <section class="dashboard-comparison-section">
+          <div class="dashboard-section-heading">
+            <div>
+              <span class="eyebrow">PERBANDINGAN ANTAR WILAYAH</span>
+              <h3>Series Inflasi Final Menurut Wilayah</h3>
+              <p>Bandingkan arah pergerakan setiap kabupaten/kota pada tahun terpilih.</p>
+            </div>
+          </div>
+
+          <div class="dashboard-comparison-grid">
+            <article id="comparisonMtmCard" class="comparison-chart-card" data-metric="mtm">
+              <div class="comparison-card-head">
+                <div>
+                  <span class="comparison-badge metric-mtm-badge">MtM</span>
+                  <h4>Perbandingan MtM Antar Wilayah</h4>
+                </div>
+                <div class="comparison-download-actions">
+                  <button class="btn" data-compare-export="image" data-metric="mtm">Image</button>
+                  <button class="btn" data-compare-export="pdf" data-metric="mtm">PDF</button>
+                  <button class="btn" data-compare-export="excel" data-metric="mtm">Excel</button>
+                </div>
+              </div>
+              <div id="comparisonMtmLegend" class="comparison-legend"></div>
+              <div class="comparison-chart-wrap">
+                <svg id="comparisonMtmChart" class="comparison-series-chart"
+                     viewBox="0 0 1100 390" preserveAspectRatio="xMidYMid meet"></svg>
+              </div>
+            </article>
+
+            <article id="comparisonYtdCard" class="comparison-chart-card" data-metric="ytd">
+              <div class="comparison-card-head">
+                <div>
+                  <span class="comparison-badge metric-ytd-badge">YtD</span>
+                  <h4>Perbandingan YtD Antar Wilayah</h4>
+                </div>
+                <div class="comparison-download-actions">
+                  <button class="btn" data-compare-export="image" data-metric="ytd">Image</button>
+                  <button class="btn" data-compare-export="pdf" data-metric="ytd">PDF</button>
+                  <button class="btn" data-compare-export="excel" data-metric="ytd">Excel</button>
+                </div>
+              </div>
+              <div id="comparisonYtdLegend" class="comparison-legend"></div>
+              <div class="comparison-chart-wrap">
+                <svg id="comparisonYtdChart" class="comparison-series-chart"
+                     viewBox="0 0 1100 390" preserveAspectRatio="xMidYMid meet"></svg>
+              </div>
+            </article>
+
+            <article id="comparisonYoyCard" class="comparison-chart-card" data-metric="yoy">
+              <div class="comparison-card-head">
+                <div>
+                  <span class="comparison-badge metric-yoy-badge">YoY</span>
+                  <h4>Perbandingan YoY Antar Wilayah</h4>
+                </div>
+                <div class="comparison-download-actions">
+                  <button class="btn" data-compare-export="image" data-metric="yoy">Image</button>
+                  <button class="btn" data-compare-export="pdf" data-metric="yoy">PDF</button>
+                  <button class="btn" data-compare-export="excel" data-metric="yoy">Excel</button>
+                </div>
+              </div>
+              <div id="comparisonYoyLegend" class="comparison-legend"></div>
+              <div class="comparison-chart-wrap">
+                <svg id="comparisonYoyChart" class="comparison-series-chart"
+                     viewBox="0 0 1100 390" preserveAspectRatio="xMidYMid meet"></svg>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <div id="chartTooltip" class="chart-tooltip hidden" role="tooltip"></div>
       </section>
 
       <section id="statsStrip" class="stats-strip">
@@ -423,6 +494,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.23"></script>
+  <script src="script.js?v=10.24"></script>
 </body>
 </html>

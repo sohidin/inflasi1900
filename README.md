@@ -327,3 +327,24 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Grafik dibuat dengan SVG native tanpa menambah library chart baru agar loading tetap ringan.
 - Backend series memanfaatkan `getHeadline_` dan cache periode yang sudah ada.
 - `Code.gs` berubah dan harus di-deploy sebagai New version.
+
+
+## V10.24 — Interactive Dashboard & Comparison Series
+- Titik grafik utama sekarang interaktif.
+- Hover / klik titik menampilkan tooltip:
+  - jenis data (MtM/YtD/YoY),
+  - nilai,
+  - bulan,
+  - wilayah.
+- Ditambahkan 3 grafik di bawah grafik utama:
+  - Perbandingan MtM antar wilayah
+  - Perbandingan YtD antar wilayah
+  - Perbandingan YoY antar wilayah
+- Setiap titik perbandingan menampilkan tooltip jenis data, nilai, periode, dan wilayah.
+- Setiap grafik perbandingan dapat di-download sebagai:
+  - Image
+  - PDF
+  - Excel
+- Backend `dashboardSeries` sekarang mengembalikan seluruh series wilayah dalam satu request.
+- Tidak ada request API terpisah untuk masing-masing grafik perbandingan.
+- `Code.gs` harus di-deploy ulang sebagai New version.

@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwzs6l3zxXMUN2XGzRDtPKK85PT7vr9yHJIc5OxR3Pr-cyDtWDUixaIdPpYXTlYvfUF/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbyxpmGTxIdD8d42b-NRPan9R9X9A1zfvewW-2wU4lwxiAL3HnDBv0BdMextKyqDV4Z3/exec"
 };
 
 // ===========================================================================
@@ -290,6 +290,22 @@ function bindAppEvents() {
   document.getElementById("downloadDashboardImage")?.addEventListener("click", downloadDashboardImage);
   document.getElementById("downloadDashboardPdf")?.addEventListener("click", downloadDashboardPdf);
   document.getElementById("downloadDashboardExcel")?.addEventListener("click", downloadDashboardExcel);
+
+  document.querySelectorAll("[data-compare-export]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const metric=btn.dataset.metric;
+      const type=btn.dataset.compareExport;
+      if(type==="image") downloadComparisonChartImage(metric);
+      else if(type==="pdf") downloadComparisonChartPdf(metric);
+      else if(type==="excel") downloadComparisonChartExcel(metric);
+    });
+  });
+
+  document.addEventListener("click", e => {
+    if(!e.target.closest(".chart-interactive-point")){
+      hideChartTooltip();
+    }
+  });
 }
 
 
@@ -679,7 +695,8 @@ function renderDashboard(r) {
   document.getElementById("dashboardChartSubtitle").textContent =
     `${r.cityCode} • ${r.cityName} • Tahun ${r.year}`;
 
-  drawFinalSeriesChart(r.series || [], r.year);
+  drawFinalSeriesChart(r.series || [], r.year, r.cityCode, r.cityName);
+  renderComparisonDashboard(r.comparisonSeries || [], r.year);
 }
 
 function svgNode(tag, attrs={}, text="") {
@@ -689,7 +706,7 @@ function svgNode(tag, attrs={}, text="") {
   return el;
 }
 
-function drawFinalSeriesChart(series, year) {
+function drawFinalSeriesChart(series, year, cityCode, cityName) {
   const svg = document.getElementById("finalSeriesChart");
   if (!svg) return;
   svg.innerHTML = "";
@@ -783,15 +800,339 @@ function drawFinalSeriesChart(series, year) {
 
     valid.forEach(p=>{
       const circle=svgNode("circle",{
-        cx:x(p.i),cy:y(p.value),r:5.2,
-        fill:"#fff",stroke:metric.color,"stroke-width":"3"
+        cx:x(p.i),cy:y(p.value),r:6,
+        fill:"#fff",stroke:metric.color,"stroke-width":"3",
+        class:"chart-interactive-point",
+        tabindex:"0",
+        "data-tooltip-metric":metric.label,
+        "data-tooltip-value":dashboardNumber(p.value),
+        "data-tooltip-period":monthLabel(p.month,year),
+        "data-tooltip-city":`${cityCode} - ${cityName}`
       });
-      circle.appendChild(svgNode("title",{},
-        `${metric.label} • ${monthLabel(p.month,year)}: ${dashboardNumber(p.value)}`
-      ));
+      bindChartPointTooltip(circle);
       svg.appendChild(circle);
     });
   });
+}
+
+
+function showChartTooltip(point, evt=null) {
+  const tooltip=document.getElementById("chartTooltip");
+  if(!tooltip || !point) return;
+
+  tooltip.innerHTML=`
+    <div class="tooltip-metric">${escapeHtml(point.dataset.tooltipMetric || "")}</div>
+    <div class="tooltip-value">${escapeHtml(point.dataset.tooltipValue || "-")}</div>
+    <div class="tooltip-meta">${escapeHtml(point.dataset.tooltipPeriod || "")}</div>
+    <div class="tooltip-city">${escapeHtml(point.dataset.tooltipCity || "")}</div>`;
+
+  tooltip.classList.remove("hidden");
+
+  const rect=point.getBoundingClientRect();
+  const tipRect=tooltip.getBoundingClientRect();
+  const x=(evt?.clientX ?? (rect.left+rect.width/2));
+  const y=(evt?.clientY ?? rect.top);
+
+  let left=x+14;
+  let top=y-tipRect.height-12;
+
+  if(left+tipRect.width>window.innerWidth-12) left=x-tipRect.width-14;
+  if(top<8) top=y+18;
+
+  tooltip.style.left=left+"px";
+  tooltip.style.top=top+"px";
+}
+
+function hideChartTooltip() {
+  document.getElementById("chartTooltip")?.classList.add("hidden");
+}
+
+function bindChartPointTooltip(point) {
+  point.addEventListener("mouseenter",e=>showChartTooltip(point,e));
+  point.addEventListener("mousemove",e=>showChartTooltip(point,e));
+  point.addEventListener("mouseleave",hideChartTooltip);
+  point.addEventListener("focus",()=>showChartTooltip(point));
+  point.addEventListener("blur",hideChartTooltip);
+  point.addEventListener("click",e=>{
+    e.stopPropagation();
+    showChartTooltip(point,e);
+  });
+}
+
+const DASH_CITY_COLORS = [
+  "#0b86cf","#08a685","#7657d6","#ef7b45","#d2a20f",
+  "#d84c8a","#3e8f67","#5b6fd5"
+];
+
+function renderComparisonDashboard(citySeries, year) {
+  const metrics=["mtm","ytd","yoy"];
+  metrics.forEach(metric=>{
+    drawCityComparisonChart(
+      document.getElementById(`comparison${metric.charAt(0).toUpperCase()+metric.slice(1)}Chart`),
+      citySeries,
+      year,
+      metric
+    );
+    renderComparisonLegend(
+      document.getElementById(`comparison${metric.charAt(0).toUpperCase()+metric.slice(1)}Legend`),
+      citySeries
+    );
+  });
+}
+
+function renderComparisonLegend(el, citySeries) {
+  if(!el) return;
+  el.innerHTML=(citySeries||[]).map((city,i)=>`
+    <span>
+      <i class="comparison-legend-line" style="background:${DASH_CITY_COLORS[i % DASH_CITY_COLORS.length]}"></i>
+      ${escapeHtml(city.code)} - ${escapeHtml(city.name)}
+    </span>
+  `).join("");
+}
+
+function drawCityComparisonChart(svg, citySeries, year, metric) {
+  if(!svg) return;
+  svg.innerHTML="";
+
+  const W=1100,H=390;
+  const margin={left:68,right:32,top:22,bottom:52};
+  const pw=W-margin.left-margin.right;
+  const ph=H-margin.top-margin.bottom;
+
+  const allPoints=[];
+  const monthsSet=new Set();
+
+  (citySeries||[]).forEach((city,ci)=>{
+    (city.series||[]).forEach(d=>{
+      monthsSet.add(String(d.month));
+      const n=Number(d[metric]);
+      if(Number.isFinite(n)){
+        allPoints.push({
+          cityIndex:ci,city,
+          month:String(d.month),value:n
+        });
+      }
+    });
+  });
+
+  const months=[...monthsSet].sort((a,b)=>Number(a)-Number(b));
+
+  if(!allPoints.length || !months.length){
+    svg.appendChild(svgNode("text",{
+      x:W/2,y:H/2,"text-anchor":"middle",
+      fill:"#70869a","font-size":"17","font-weight":"700"
+    },"Data perbandingan belum tersedia"));
+    return;
+  }
+
+  let min=Math.min(...allPoints.map(p=>p.value));
+  let max=Math.max(...allPoints.map(p=>p.value));
+  if(min===max){min-=1;max+=1;}
+  const pad=Math.max((max-min)*0.12,0.2);
+  min-=pad;max+=pad;
+
+  const xForMonth=month=>{
+    const idx=months.indexOf(String(month));
+    return margin.left+(months.length===1?pw/2:(idx/(months.length-1))*pw);
+  };
+  const y=v=>margin.top+((max-v)/(max-min))*ph;
+
+  svg.appendChild(svgNode("rect",{
+    x:margin.left,y:margin.top,width:pw,height:ph,
+    rx:12,fill:"#fbfdff"
+  }));
+
+  for(let i=0;i<=5;i++){
+    const val=max-(i/5)*(max-min);
+    const yy=y(val);
+    svg.appendChild(svgNode("line",{
+      x1:margin.left,y1:yy,x2:W-margin.right,y2:yy,
+      stroke:"#dde9f0","stroke-width":"1"
+    }));
+    svg.appendChild(svgNode("text",{
+      x:margin.left-10,y:yy+4,"text-anchor":"end",
+      fill:"#71879a","font-size":"11.5","font-weight":"650"
+    },dashboardNumber(val)));
+  }
+
+  if(min<=0 && max>=0){
+    const zy=y(0);
+    svg.appendChild(svgNode("line",{
+      x1:margin.left,y1:zy,x2:W-margin.right,y2:zy,
+      stroke:"#8fa7b9","stroke-width":"1.5","stroke-dasharray":"5 5"
+    }));
+  }
+
+  months.forEach(month=>{
+    svg.appendChild(svgNode("text",{
+      x:xForMonth(month),y:H-23,"text-anchor":"middle",
+      fill:"#587085","font-size":"11.5","font-weight":"750"
+    },DASH_MONTHS[month]||month));
+  });
+
+  (citySeries||[]).forEach((city,ci)=>{
+    const color=DASH_CITY_COLORS[ci % DASH_CITY_COLORS.length];
+    const pts=(city.series||[])
+      .map(d=>({month:String(d.month),value:Number(d[metric])}))
+      .filter(p=>Number.isFinite(p.value))
+      .sort((a,b)=>Number(a.month)-Number(b.month));
+
+    if(!pts.length) return;
+
+    svg.appendChild(svgNode("polyline",{
+      points:pts.map(p=>`${xForMonth(p.month)},${y(p.value)}`).join(" "),
+      fill:"none",stroke:color,"stroke-width":"2.6",
+      "stroke-linecap":"round","stroke-linejoin":"round",
+      opacity:"0.92"
+    }));
+
+    pts.forEach(p=>{
+      const circle=svgNode("circle",{
+        cx:xForMonth(p.month),cy:y(p.value),r:5.4,
+        fill:"#fff",stroke:color,"stroke-width":"2.7",
+        class:"chart-interactive-point",
+        tabindex:"0",
+        "data-tooltip-metric":metric.toUpperCase(),
+        "data-tooltip-value":dashboardNumber(p.value),
+        "data-tooltip-period":monthLabel(p.month,year),
+        "data-tooltip-city":`${city.code} - ${city.name}`
+      });
+      bindChartPointTooltip(circle);
+      svg.appendChild(circle);
+    });
+  });
+}
+
+function comparisonMetricLabel(metric) {
+  return ({mtm:"MtM",ytd:"YtD",yoy:"YoY"})[metric] || metric;
+}
+
+function comparisonCardForMetric(metric) {
+  const id=metric.charAt(0).toUpperCase()+metric.slice(1);
+  return document.getElementById(`comparison${id}Card`);
+}
+
+async function comparisonChartCanvas(metric) {
+  const card=comparisonCardForMetric(metric);
+  if(!card) throw new Error("Grafik perbandingan belum tersedia.");
+
+  const clone=card.cloneNode(true);
+  clone.id=`comparison${metric}ExportClone`;
+  clone.classList.add("comparison-chart-export-clone");
+  clone.querySelector(".comparison-download-actions")?.remove();
+
+  clone.style.position="fixed";
+  clone.style.left="-20000px";
+  clone.style.top="0";
+  clone.style.width="1350px";
+  clone.style.maxWidth="1350px";
+  clone.style.background="#fff";
+  clone.style.padding="22px";
+
+  document.body.appendChild(clone);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  try{
+    return await html2canvas(clone,{
+      backgroundColor:"#fff",
+      scale:1.3,
+      useCORS:true,
+      logging:false,
+      width:clone.scrollWidth,
+      height:clone.scrollHeight,
+      windowWidth:1450,
+      windowHeight:clone.scrollHeight+70
+    });
+  }finally{
+    clone.remove();
+  }
+}
+
+function comparisonExportName(metric,ext) {
+  const r=state.dashboardData||{};
+  const meta=getDownloadMeta();
+  return safeName(
+    `Perbandingan-${comparisonMetricLabel(metric)}-Antar-Wilayah-${r.year||"tahun"}-${meta.fileStamp}`
+  )+"."+ext;
+}
+
+async function downloadComparisonChartImage(metric) {
+  try{
+    const canvas=await comparisonChartCanvas(metric);
+    const a=document.createElement("a");
+    a.download=comparisonExportName(metric,"png");
+    a.href=canvas.toDataURL("image/png");
+    a.click();
+  }catch(err){showError(err.message||String(err));}
+}
+
+async function downloadComparisonChartPdf(metric) {
+  try{
+    const canvas=await comparisonChartCanvas(metric);
+    const pageW=841.89,pageH=595.28,margin=22;
+    const usableW=pageW-margin*2,usableH=pageH-margin*2;
+    let width=usableW;
+    let height=width*(canvas.height/canvas.width);
+    if(height>usableH){
+      const scale=usableH/height;
+      height*=scale;width*=scale;
+    }
+    pdfMake.createPdf({
+      pageSize:"A4",
+      pageOrientation:"landscape",
+      pageMargins:[margin,margin,margin,margin],
+      content:[{image:canvas.toDataURL("image/png"),width,alignment:"center"}],
+      info:{title:`Perbandingan ${comparisonMetricLabel(metric)} Antar Wilayah`}
+    }).download(comparisonExportName(metric,"pdf"));
+  }catch(err){showError(err.message||String(err));}
+}
+
+function downloadComparisonChartExcel(metric) {
+  const r=state.dashboardData;
+  if(!r || !r.comparisonSeries) return showError("Data perbandingan belum tersedia.");
+
+  const months=[...new Set(
+    r.comparisonSeries.flatMap(c=>(c.series||[]).map(d=>String(d.month)))
+  )].sort((a,b)=>Number(a)-Number(b));
+
+  const header=["Bulan",...r.comparisonSeries.map(c=>`${c.code} - ${c.name}`)];
+  const rows=months.map(month=>[
+    monthLabel(month),
+    ...r.comparisonSeries.map(city=>{
+      const point=(city.series||[]).find(d=>String(d.month)===String(month));
+      return point ? round2(point[metric]) : "";
+    })
+  ]);
+
+  const meta=getDownloadMeta();
+  const aoa=[
+    [`PERBANDINGAN ${comparisonMetricLabel(metric).toUpperCase()} ANTAR WILAYAH`],
+    ["Tahun",r.year],
+    ["Tanggal Download",meta.dateText],
+    ["Jam Download",meta.timeText],
+    [],
+    header,
+    ...rows
+  ];
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"]=[
+    {wch:14},
+    ...r.comparisonSeries.map(()=>({wch:27}))
+  ];
+
+  const range=XLSX.utils.decode_range(ws["!ref"]||"A1:A1");
+  for(let rr=6;rr<=range.e.r;rr++){
+    for(let cc=1;cc<=range.e.c;cc++){
+      const cell=ws[XLSX.utils.encode_cell({r:rr,c:cc})];
+      if(cell && cell.t==="n") cell.z="0.00";
+    }
+  }
+
+  XLSX.utils.book_append_sheet(
+    wb,ws,`Perbandingan ${comparisonMetricLabel(metric)}`
+  );
+  XLSX.writeFile(wb,comparisonExportName(metric,"xlsx"));
 }
 
 function dashboardExportName(ext) {
