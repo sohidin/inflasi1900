@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.24">
+  <link rel="stylesheet" href="style.css?v=10.25">
 </head>
 <body>
   <!-- LOGIN -->
@@ -167,16 +167,27 @@
             <h2>Dashboard Inflasi Bangka Belitung</h2>
             <p>Ringkasan angka final dan perkembangan inflasi bulanan dalam satu tampilan.</p>
           </div>
-          <div class="dashboard-control-panel">
-            <div class="dashboard-control">
-              <label>Tahun</label>
+          <div class="dashboard-control-panel dashboard-filter-redesign">
+            <div class="dashboard-filter-block">
+              <div class="dashboard-filter-label">
+                <span class="filter-scope-badge global-scope">SEMUA GRAFIK</span>
+                <strong>Tahun Analisis</strong>
+              </div>
               <select id="dashboardYear"></select>
+              <small>Memperbarui seluruh grafik.</small>
             </div>
-            <div class="dashboard-control dashboard-control-city">
-              <label>Wilayah</label>
+            <div class="dashboard-filter-divider"></div>
+            <div class="dashboard-filter-block dashboard-filter-primary">
+              <div class="dashboard-filter-label">
+                <span class="filter-scope-badge primary-scope">GRAFIK UTAMA</span>
+                <strong>Wilayah Utama</strong>
+              </div>
               <select id="dashboardCity"></select>
+              <small>Hanya mengubah grafik utama dan KPI.</small>
             </div>
-            <button id="dashboardApplyBtn" class="btn btn-primary dashboard-apply-btn">Tampilkan</button>
+            <div id="dashboardFastStatus" class="dashboard-fast-status">
+              <span class="fast-status-dot"></span><span>Siap</span>
+            </div>
           </div>
         </div>
 
@@ -494,6 +505,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.24"></script>
+  <script src="script.js?v=10.25"></script>
 </body>
 </html>

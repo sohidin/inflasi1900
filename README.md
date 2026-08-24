@@ -348,3 +348,18 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Backend `dashboardSeries` sekarang mengembalikan seluruh series wilayah dalam satu request.
 - Tidak ada request API terpisah untuk masing-masing grafik perbandingan.
 - `Code.gs` harus di-deploy ulang sebagai New version.
+
+
+## V10.25 — Performance
+- Login Dashboard memakai `dashboardBootstrap`, tidak memuat filter metadata besar terlebih dahulu.
+- Backend membaca satu tahun Angka Final dalam range gabungan, bukan per bulan.
+- Wilayah dikirim sekaligus; ganti wilayah = render browser tanpa request API.
+- Ganti tahun = satu request per tahun, lalu disimpan di `dashboardYearCache`.
+- Kembali ke tahun yang pernah dibuka = instan.
+- Filter UX:
+  - Tahun = SEMUA GRAFIK.
+  - Wilayah = GRAFIK UTAMA.
+- Menu Sementara/Final diprefetch setelah Dashboard tampil.
+- Updated-at tidak lagi memblokir perpindahan menu.
+- Skeleton tabel ditunda 180 ms agar response cache tidak terasa berkedip.
+- `Code.gs` berubah dan harus deploy New version.

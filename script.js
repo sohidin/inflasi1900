@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbyxpmGTxIdD8d42b-NRPan9R9X9A1zfvewW-2wU4lwxiAL3HnDBv0BdMextKyqDV4Z3/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbzHQqVYySipLIfzeFJ4iCKhwm3vtHwJJcPSNEHQ-Bn86Rac6N83BXYtRoc5JE_JhNYV/exec"
 };
 
 // ===========================================================================
@@ -23,6 +23,9 @@ const state = {
   finalHeadlineData: null,
   dashboardData: null,
   dashboardFilterCache: null,
+  dashboardYearCache: new Map(),
+  dashboardSelectedCity: "1900",
+  _prefetchStarted: false,
   pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 
   // [OPT-1] Prefetch queue — menyimpan permintaan filter/data yang sedang berjalan
@@ -220,15 +223,15 @@ async function handleLeafClick(btn) {
   state.period = btn.dataset.period || "";
   state.view = btn.dataset.view;
 
-  // [OPT-4b] Muat filter + updatedAt paralel bila source berubah.
   if (previousSource !== state.source || !state.filterCache[state.source]) {
-    const tasks = [loadSourceFilters()];
-    if (state.source === "asem") tasks.push(loadUpdatedAt());
-    await Promise.all(tasks);
+    await loadSourceFilters();
   } else {
     state.filters = state.filterCache[state.source];
     hydrateFilterControlsFromState();
-    if (state.source === "asem") await loadUpdatedAt();
+  }
+
+  if(state.source==="asem" && !state.updatedAtCache){
+    loadUpdatedAt().catch(()=>{});
   }
 
   await loadCurrentView();
@@ -283,9 +286,13 @@ function bindAppEvents() {
     downloadAllMainMenu("final");
   });
 
-  document.getElementById("dashboardApplyBtn")?.addEventListener("click", loadDashboard);
-  document.getElementById("dashboardYear")?.addEventListener("change", loadDashboard);
-  document.getElementById("dashboardCity")?.addEventListener("change", loadDashboard);
+  document.getElementById("dashboardYear")?.addEventListener("change", () => {
+    loadDashboardYear(valueOf("dashboardYear"));
+  });
+  document.getElementById("dashboardCity")?.addEventListener("change", () => {
+    state.dashboardSelectedCity=valueOf("dashboardCity")||"1900";
+    renderDashboardFromYearData();
+  });
 
   document.getElementById("downloadDashboardImage")?.addEventListener("click", downloadDashboardImage);
   document.getElementById("downloadDashboardPdf")?.addEventListener("click", downloadDashboardPdf);
@@ -552,97 +559,141 @@ function setDashboardLayout(active) {
   }
 }
 
-async function ensureDashboardFilters() {
-  if (state.dashboardFilterCache) return state.dashboardFilterCache;
-  state.dashboardFilterCache = await cachedApi(
-    "dashboardFinalFilters",
-    {action:"filters",source:"final"},
-    10 * 60 * 1000
-  );
-  return state.dashboardFilterCache;
+function setDashboardFastStatus(text,loading=false){
+  const box=document.getElementById("dashboardFastStatus");
+  if(!box) return;
+  box.classList.toggle("is-loading",!!loading);
+  const t=box.querySelector("span:last-child");
+  if(t) t.textContent=text;
 }
 
-function hydrateDashboardFilterControls(filters) {
-  const yearEl = document.getElementById("dashboardYear");
-  const cityEl = document.getElementById("dashboardCity");
-  if (!yearEl || !cityEl || !filters) return;
+function dashboardCityOptions(data){
+  return (data?.cities||[]).map(c=>({value:String(c.code),label:`${c.code} - ${c.name}`}));
+}
 
-  const oldYear = yearEl.value;
-  fillSelect("dashboardYear", filters.years || []);
-  if (oldYear && [...yearEl.options].some(o => o.value === oldYear)) {
-    yearEl.value = oldYear;
-  }
+function hydrateDashboardControls(data,years){
+  const y=document.getElementById("dashboardYear"), c=document.getElementById("dashboardCity");
+  if(!y||!c) return;
 
-  const oldCity = cityEl.value;
-  const cityMap = new Map();
-  (filters.cities || []).forEach(c => {
-    let code = String(c.code || "");
-    if (code === "19") code = "1900";
-    if (!cityMap.has(code)) cityMap.set(code, c.name || code);
-  });
+  const oldYear=y.value;
+  fillSelect("dashboardYear",years||[]);
+  const target=String(data?.year||oldYear||(years||[])[0]||"");
+  if([...y.options].some(o=>o.value===target)) y.value=target;
 
-  const preferred = ["1900","1902","1903","1906","1971"];
-  const cityOptions = [];
-  preferred.forEach(code => {
-    if (cityMap.has(code)) {
-      cityOptions.push({
-        value:code,
-        label:`${code} - ${cityMap.get(code)}`
-      });
-    }
-  });
-  [...cityMap.keys()]
-    .filter(code => !preferred.includes(code))
-    .sort((a,b) => Number(a)-Number(b))
-    .forEach(code => cityOptions.push({
-      value:code,
-      label:`${code} - ${cityMap.get(code)}`
-    }));
+  const oldCity=state.dashboardSelectedCity||c.value||"1900";
+  fillSelect("dashboardCity",dashboardCityOptions(data));
+  const values=[...c.options].map(o=>o.value);
+  c.value=values.includes(oldCity)?oldCity:(values.includes("1900")?"1900":(values[0]||""));
+  state.dashboardSelectedCity=c.value;
+}
 
-  fillSelect("dashboardCity", cityOptions);
-  if (oldCity && [...cityEl.options].some(o => o.value === oldCity)) {
-    cityEl.value = oldCity;
-  } else if ([...cityEl.options].some(o => o.value === "1900")) {
-    cityEl.value = "1900";
+function selectedCityFromYear(data){
+  const code=state.dashboardSelectedCity||valueOf("dashboardCity")||"1900";
+  return (data?.comparisonSeries||[]).find(x=>String(x.code)===String(code))
+    ||(data?.comparisonSeries||[])[0]
+    ||{code:"",name:"",series:[]};
+}
+
+function makeDashboardData(data){
+  const selected=selectedCityFromYear(data);
+  const series=selected.series||[];
+  const latest=series.length?series[series.length-1]:null;
+  const previous=series.length>1?series[series.length-2]:null;
+
+  const summary=metric=>{
+    const vals=series.filter(x=>Number.isFinite(Number(x[metric]))).map(x=>({month:x.month,value:Number(x[metric])}));
+    if(!vals.length) return {max:null,min:null,maxMonth:"",minMonth:""};
+    let max=vals[0],min=vals[0];
+    vals.forEach(x=>{if(x.value>max.value)max=x;if(x.value<min.value)min=x;});
+    return {max:max.value,min:min.value,maxMonth:max.month,minMonth:min.month};
+  };
+
+  return {
+    year:data.year,years:data.years||[],
+    cityCode:selected.code,cityName:selected.name,
+    cities:data.cities||[],series,
+    comparisonSeries:data.comparisonSeries||[],
+    latest,previous,
+    mtmSummary:summary("mtm"),ytdSummary:summary("ytd"),yoySummary:summary("yoy")
+  };
+}
+
+async function loadDashboard(){
+  state.view="dashboard";state.source="final";
+  setDashboardLayout(true);clearError();
+  setDashboardFastStatus("Memuat tahun terbaru…",true);
+
+  try{
+    const r=await cachedApi("dashboardBootstrap",{action:"dashboardBootstrap"},30*60*1000);
+    const data={year:r.year,years:r.years||[],cities:r.cities||[],months:r.months||[],comparisonSeries:r.comparisonSeries||[]};
+    state.dashboardYearCache.set(String(r.year),data);
+    hydrateDashboardControls(data,r.years||[]);
+    renderDashboardFromYearData();
+    setDashboardFastStatus("Siap");
+    startBackgroundPrefetch();
+  }catch(err){
+    setDashboardFastStatus("Gagal");
+    showError(err.message||String(err));
   }
 }
 
-async function loadDashboard() {
-  state.view = "dashboard";
-  state.source = "final";
-  setDashboardLayout(true);
-  clearError();
-  showLoading(true);
+async function loadDashboardYear(year){
+  year=String(year||"");
+  if(!year) return;
+  setDashboardFastStatus(`Memuat ${year}…`,true);
 
-  try {
-    const filters = await ensureDashboardFilters();
-    hydrateDashboardFilterControls(filters);
-
-    const year = valueOf("dashboardYear") || String((filters.years || [])[0] || "");
-    const cityCode = valueOf("dashboardCity") || "1900";
-
-    const r = await cachedApi(
-      "dashboardSeries",
-      {action:"dashboardSeries",year,cityCode},
-      10 * 60 * 1000
-    );
-
-    state.dashboardData = r;
-
-    // Backend may normalise city/year; sync controls without re-fetch.
-    if ([...document.getElementById("dashboardYear").options].some(o => o.value === String(r.year))) {
-      document.getElementById("dashboardYear").value = String(r.year);
-    }
-    if ([...document.getElementById("dashboardCity").options].some(o => o.value === String(r.cityCode))) {
-      document.getElementById("dashboardCity").value = String(r.cityCode);
-    }
-
-    renderDashboard(r);
-  } catch (err) {
-    showError(err.message || String(err));
-  } finally {
-    showLoading(false);
+  if(state.dashboardYearCache.has(year)){
+    const data=state.dashboardYearCache.get(year);
+    hydrateDashboardControls(data,data.years||[]);
+    renderDashboardFromYearData();
+    setDashboardFastStatus("Siap");
+    return;
   }
+
+  try{
+    const r=await cachedApi("dashboardYear",{action:"dashboardYear",year},30*60*1000);
+    const data={year:r.year,years:r.years||[],cities:r.cities||[],months:r.months||[],comparisonSeries:r.comparisonSeries||[]};
+    state.dashboardYearCache.set(year,data);
+    hydrateDashboardControls(data,r.years||[]);
+    renderDashboardFromYearData();
+    setDashboardFastStatus("Siap");
+  }catch(err){
+    setDashboardFastStatus("Gagal");
+    showError(err.message||String(err));
+  }
+}
+
+function renderDashboardFromYearData(){
+  const year=String(valueOf("dashboardYear")||"");
+  const data=state.dashboardYearCache.get(year);
+  if(!data) return;
+
+  state.dashboardSelectedCity=valueOf("dashboardCity")||state.dashboardSelectedCity||"1900";
+  state.dashboardData=makeDashboardData(data);
+
+  renderDashboard(state.dashboardData);
+  renderComparisonDashboard(data.comparisonSeries||[],data.year);
+}
+
+function startBackgroundPrefetch(){
+  if(state._prefetchStarted) return;
+  state._prefetchStarted=true;
+
+  const task=async()=>{
+    try{
+      const [a,f]=await Promise.all([
+        cachedApi("filters",{action:"filters",source:"asem"},20*60*1000),
+        cachedApi("filters",{action:"filters",source:"final"},20*60*1000)
+      ]);
+      state.filterCache.asem=a;
+      state.filterCache.final=f;
+      state.finalFilterCache=f;
+    }catch(_){}
+    try{await loadUpdatedAt();}catch(_){}
+  };
+
+  if("requestIdleCallback" in window) requestIdleCallback(()=>task(),{timeout:1500});
+  else setTimeout(()=>task(),400);
 }
 
 function dashboardNumber(v) {
@@ -696,7 +747,6 @@ function renderDashboard(r) {
     `${r.cityCode} • ${r.cityName} • Tahun ${r.year}`;
 
   drawFinalSeriesChart(r.series || [], r.year, r.cityCode, r.cityName);
-  renderComparisonDashboard(r.comparisonSeries || [], r.year);
 }
 
 function svgNode(tag, attrs={}, text="") {
@@ -1256,13 +1306,14 @@ async function loadSourceFilters() {
     hydrateFilterControlsFromState();
     return;
   }
-  showLoading(true);
   try {
-    state.filters = await cachedApi("filters", { action: "filters", source: state.source }, 600000);
+    state.filters = await cachedApi("filters",{action:"filters",source:state.source},20*60*1000);
     state.filterCache[state.source] = state.filters;
     hydrateFilterControlsFromState();
-  } catch (err) { showError(err.message); }
-  finally { showLoading(false); }
+  } catch (err) {
+    showError(err.message);
+    throw err;
+  }
 }
 
 function hydrateFilterControlsFromState() {
@@ -1348,8 +1399,8 @@ function updateCompareFinalMonths() {
 // ===========================================================================
 async function loadCurrentView() {
   updateUI();
-  showLoading(true);
   clearError();
+  let loadingTimer=setTimeout(()=>showLoading(true),180);
 
   const args = {
     source: state.source,
@@ -1385,7 +1436,10 @@ async function loadCurrentView() {
       renderStandard(r);
     }
   } catch (err) { showError(err.message); }
-  finally { showLoading(false); }
+  finally {
+    clearTimeout(loadingTimer);
+    showLoading(false);
+  }
 }
 
 // ===========================================================================

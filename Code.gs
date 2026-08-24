@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.24"
+  CACHE_VERSION: "v10.25"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -34,7 +34,8 @@ function doGet(e) {
     else if (action === "headlineCompare") result = getHeadlineCompare_(p);
     else if (action === "commodity") result = getCommodity_(p);
     else if (action === "bulkExport") result = getBulkExport_(p);
-    else if (action === "dashboardSeries") result = getDashboardSeries_(p);
+    else if (action === "dashboardBootstrap") result = getDashboardBootstrap_(p);
+    else if (action === "dashboardYear") result = getDashboardYear_(p);
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
     else if (action === "clearCache") result = clearCache_(p.token);
@@ -288,123 +289,114 @@ function getPivotTable_(p) {
 }
 
 
-function getDashboardSeries_(p) {
-  const filters = getFilters_("final");
-  const requestedYear = String(p.year || "");
-  const year = requestedYear && (filters.years || []).indexOf(requestedYear) >= 0
-    ? requestedYear
-    : String((filters.years || [])[0] || "");
+function dashboardYears_() {
+  const index=getPeriodIndex_("final"), years={};
+  Object.keys(index).forEach(k=>{
+    const y=String(k).split("|")[0];
+    if(y) years[y]=true;
+  });
+  return Object.keys(years).sort((a,b)=>Number(b)-Number(a));
+}
 
-  if (!year) throw new Error("Data tahun Angka Final belum tersedia.");
-
-  function normCode_(v) {
-    const x = clean_(v);
-    return (x === "19" || x === "1900") ? "1900" : x;
+function getDashboardYearRows_(year) {
+  const memoKey="dashYear|"+year;
+  if(Object.prototype.hasOwnProperty.call(REQUEST_PERIOD_ROWS_,memoKey)){
+    return REQUEST_PERIOD_ROWS_[memoKey];
   }
 
-  const cityMap = {};
-  (filters.cities || []).forEach(c => {
-    const code = normCode_(c.code);
-    if (!code) return;
-    cityMap[code] = c.name || code;
+  const obj=sheet_("final"), index=getPeriodIndex_("final"), ranges=[];
+  Object.keys(index).forEach(k=>{
+    const parts=String(k).split("|");
+    if(parts[0]!==String(year)) return;
+    (index[k]||[]).forEach(seg=>{
+      ranges.push({start:Number(seg.start),end:Number(seg.start)+Number(seg.count)-1});
+    });
+  });
+  if(!ranges.length) return [];
+
+  ranges.sort((a,b)=>a.start-b.start);
+  const merged=[];
+  ranges.forEach(r=>{
+    const last=merged[merged.length-1];
+    if(last && r.start<=last.end+1) last.end=Math.max(last.end,r.end);
+    else merged.push({start:r.start,end:r.end});
   });
 
-  const preferredCodes = ["1900","1902","1903","1906","1971"];
-  const cityList = [];
-  preferredCodes.forEach(code => {
-    if (cityMap[code]) cityList.push({code:code,name:cityMap[code]});
+  let rows=[];
+  merged.forEach(r=>{
+    rows=rows.concat(
+      obj.sh.getRange(r.start,1,r.end-r.start+1,obj.cfg.lastCol).getDisplayValues()
+    );
   });
-  Object.keys(cityMap)
-    .filter(code => preferredCodes.indexOf(code) === -1)
-    .sort(numericSort_)
-    .forEach(code => cityList.push({code:code,name:cityMap[code]}));
 
-  let cityCode = normCode_(p.cityCode);
-  if (!cityCode || !cityMap[cityCode]) {
-    cityCode = cityMap["1900"] ? "1900" : String((cityList[0] || {}).code || "");
+  const c=obj.cfg.cols;
+  rows=rows.filter(r=>clean_(r[c.year-1])===String(year));
+  REQUEST_PERIOD_ROWS_[memoKey]=rows;
+  return rows;
+}
+
+function buildDashboardYearPayload_(year) {
+  const cache=CacheService.getScriptCache();
+  const key=CONFIG.CACHE_VERSION+":dashboardPayload:"+year;
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
+
+  const cfg=sourceConfig_("final"), c=cfg.cols, rows=getDashboardYearRows_(year);
+
+  function normCode_(v){
+    const x=clean_(v);
+    return (x==="19"||x==="1900")?"1900":x;
   }
-  if (!cityCode) throw new Error("Wilayah Angka Final tidak tersedia.");
 
-  const months = ((filters.monthsByYear || {})[year] || [])
-    .slice()
-    .sort(numericSort_);
+  const cityMap={}, monthMap={};
+  rows.forEach(r=>{
+    const flag=clean_(r[c.flag-1]);
+    const commodityCode=clean_(r[c.commodityCode-1]);
+    const commodityName=clean_(r[c.commodityName-1]).toUpperCase();
+    if(!(flag==="0"||commodityCode==="0"||commodityName==="UMUM")) return;
 
-  const selectedSeries = [];
-  const citySeriesMap = {};
-  cityList.forEach(c => citySeriesMap[c.code] = []);
+    const month=clean_(r[c.month-1]), code=normCode_(r[c.cityCode-1]);
+    if(!month||!code) return;
 
-  months.forEach(month => {
-    // One headline call per month gives ALL cities; cache period/headline is reused.
-    const headline = getHeadline_({source:"final",year:year,month:String(month)});
-
-    (headline.rows || []).forEach(r => {
-      const code = normCode_(r[0]);
-      if (!citySeriesMap[code]) return;
-
-      citySeriesMap[code].push({
-        month:String(month),
-        mtm:r[2],
-        ytd:r[3],
-        yoy:r[4]
-      });
-    });
-
-    const selectedRow = (headline.rows || []).find(r => normCode_(r[0]) === cityCode);
-    if (selectedRow) {
-      selectedSeries.push({
-        month:String(month),
-        mtm:selectedRow[2],
-        ytd:selectedRow[3],
-        yoy:selectedRow[4]
-      });
-    }
-  });
-
-  const available = selectedSeries.filter(x =>
-    x.mtm !== null || x.ytd !== null || x.yoy !== null
-  );
-
-  const latest = available.length ? available[available.length - 1] : null;
-  const previous = available.length > 1 ? available[available.length - 2] : null;
-
-  function metricSummary_(metric) {
-    const vals = available
-      .filter(x => x[metric] !== null && x[metric] !== undefined && !isNaN(Number(x[metric])))
-      .map(x => ({month:x.month,value:Number(x[metric])}));
-    if (!vals.length) return {max:null,min:null,maxMonth:"",minMonth:""};
-    let max = vals[0], min = vals[0];
-    vals.forEach(x => {
-      if (x.value > max.value) max = x;
-      if (x.value < min.value) min = x;
-    });
-    return {
-      max:max.value,
-      min:min.value,
-      maxMonth:max.month,
-      minMonth:min.month
+    cityMap[code]=clean_(r[c.cityName-1])||code;
+    if(!monthMap[month]) monthMap[month]={};
+    monthMap[month][code]={
+      month:month,
+      mtm:toNumber_(r[c.inflasiMtm-1]),
+      ytd:toNumber_(r[c.inflasiYtd-1]),
+      yoy:toNumber_(r[c.inflasiYoy-1])
     };
-  }
+  });
 
-  const comparisonSeries = cityList.map(c => ({
-    code:c.code,
-    name:c.name,
-    series:citySeriesMap[c.code] || []
+  const preferred=["1900","1902","1903","1906","1971"];
+  const codes=preferred.filter(c=>cityMap[c]);
+  Object.keys(cityMap).filter(c=>preferred.indexOf(c)===-1).sort(numericSort_).forEach(c=>codes.push(c));
+
+  const cities=codes.map(code=>({code:code,name:cityMap[code]}));
+  const months=Object.keys(monthMap).sort(numericSort_);
+  const comparisonSeries=cities.map(city=>({
+    code:city.code,
+    name:city.name,
+    series:months.filter(m=>monthMap[m]&&monthMap[m][city.code]).map(m=>monthMap[m][city.code])
   }));
 
-  return {
-    year:year,
-    cityCode:cityCode,
-    cityName:cityMap[cityCode] || cityCode,
-    cities:cityList,
-    years:filters.years || [],
-    series:selectedSeries,
-    comparisonSeries:comparisonSeries,
-    latest:latest,
-    previous:previous,
-    mtmSummary:metricSummary_("mtm"),
-    ytdSummary:metricSummary_("ytd"),
-    yoySummary:metricSummary_("yoy")
-  };
+  const result={year:String(year),cities:cities,months:months,comparisonSeries:comparisonSeries};
+  cacheSmall_(key,result);
+  return result;
+}
+
+function getDashboardBootstrap_(p){
+  const years=dashboardYears_();
+  const requested=String(p.year||"");
+  const year=requested&&years.indexOf(requested)>=0?requested:String(years[0]||"");
+  if(!year) throw new Error("Data Angka Final belum tersedia.");
+  return {years:years,...buildDashboardYearPayload_(year)};
+}
+
+function getDashboardYear_(p){
+  const years=dashboardYears_(), year=String(p.year||"");
+  if(!year||years.indexOf(year)===-1) throw new Error("Tahun Dashboard tidak tersedia.");
+  return {years:years,...buildDashboardYearPayload_(year)};
 }
 
 function getHeadline_(p) {
