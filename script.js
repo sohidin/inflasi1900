@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbzg4v77Qj_rxaZBaqFLzUNc69l8-gSEx2CwwYmUCOiPeEBpt5j_rlA6E7Z6-ZUaFDZK/exec"
 };
 
 // ===========================================================================
