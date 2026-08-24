@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.26"
+  CACHE_VERSION: "v10.27"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -232,6 +232,216 @@ function getFilters_(source) {
   return result;
 }
 
+
+
+/* ==========================================================================
+   V10.27 HOTFIX — DASHBOARD BACKEND
+   Dashboard WAJIB Flag = 0.
+   Data tahunan dibaca ringkas dari B:L, lalu seluruh wilayah dikembalikan
+   sekaligus agar ganti wilayah di browser tidak membutuhkan request baru.
+   ========================================================================== */
+
+function dashboardYears_() {
+  const index = getPeriodIndex_("final");
+  const years = {};
+
+  Object.keys(index || {}).forEach(k => {
+    const y = String(k).split("|")[0];
+    if (y) years[y] = true;
+  });
+
+  return Object.keys(years).sort((a,b) => Number(b) - Number(a));
+}
+
+function getDashboardYearRows_(year) {
+  year = String(year || "");
+  if (!year) return [];
+
+  const memoKey = "dashboardYearCompact|" + year;
+  if (Object.prototype.hasOwnProperty.call(REQUEST_PERIOD_ROWS_, memoKey)) {
+    return REQUEST_PERIOD_ROWS_[memoKey];
+  }
+
+  const obj = sheet_("final");
+  const index = getPeriodIndex_("final");
+  const ranges = [];
+
+  Object.keys(index || {}).forEach(k => {
+    const parts = String(k).split("|");
+    if (parts[0] !== year) return;
+
+    (index[k] || []).forEach(seg => {
+      const start = Number(seg.start);
+      const count = Number(seg.count);
+      if (start > 0 && count > 0) {
+        ranges.push({
+          start:start,
+          end:start + count - 1
+        });
+      }
+    });
+  });
+
+  if (!ranges.length) {
+    REQUEST_PERIOD_ROWS_[memoKey] = [];
+    return [];
+  }
+
+  ranges.sort((a,b) => a.start - b.start);
+
+  // Gabungkan range yang berdempetan supaya 1 tahun biasanya hanya 1 read.
+  const merged = [];
+  ranges.forEach(r => {
+    const last = merged[merged.length - 1];
+    if (last && r.start <= last.end + 1) {
+      last.end = Math.max(last.end, r.end);
+    } else {
+      merged.push({start:r.start, end:r.end});
+    }
+  });
+
+  let rows = [];
+
+  merged.forEach(r => {
+    const count = r.end - r.start + 1;
+
+    // Hanya B:L (11 kolom), bukan A:O.
+    // Mapping 0-based:
+    // 0=B Bulan
+    // 1=C Kode Kota
+    // 2=D Nama Kota
+    // 5=G Flag
+    // 8=J Inflasi MtM
+    // 9=K Inflasi YtD
+    // 10=L Inflasi YoY
+    rows = rows.concat(
+      obj.sh.getRange(r.start, 2, count, 11).getDisplayValues()
+    );
+  });
+
+  REQUEST_PERIOD_ROWS_[memoKey] = rows;
+  return rows;
+}
+
+function buildDashboardYearPayload_(year) {
+  year = String(year || "");
+  if (!year) throw new Error("Tahun Dashboard belum dipilih.");
+
+  const cache = CacheService.getScriptCache();
+  const cacheKey = CONFIG.CACHE_VERSION + ":dashboardPayload:" + year;
+  const cached = cache.get(cacheKey);
+
+  if (cached) return JSON.parse(cached);
+
+  const rows = getDashboardYearRows_(year);
+
+  function normCode_(v) {
+    const x = clean_(v);
+    return (x === "19" || x === "1900") ? "1900" : x;
+  }
+
+  const cityMap = {};
+  const monthMap = {};
+
+  rows.forEach(r => {
+    // STRICT: Dashboard hanya Flag 0.
+    const flag = clean_(r[5]);
+    if (flag !== "0") return;
+
+    const month = clean_(r[0]);
+    const cityCode = normCode_(r[1]);
+    const cityName = clean_(r[2]);
+
+    if (!month || !cityCode) return;
+
+    cityMap[cityCode] = cityName || cityCode;
+
+    if (!monthMap[month]) monthMap[month] = {};
+
+    monthMap[month][cityCode] = {
+      month:month,
+      mtm:toNumber_(r[8]),
+      ytd:toNumber_(r[9]),
+      yoy:toNumber_(r[10])
+    };
+  });
+
+  const preferred = ["1900","1902","1903","1906","1971"];
+  const cityCodes = preferred.filter(code => cityMap[code]);
+
+  Object.keys(cityMap)
+    .filter(code => preferred.indexOf(code) === -1)
+    .sort(numericSort_)
+    .forEach(code => cityCodes.push(code));
+
+  const cities = cityCodes.map(code => ({
+    code:code,
+    name:cityMap[code]
+  }));
+
+  const months = Object.keys(monthMap).sort(numericSort_);
+
+  const comparisonSeries = cities.map(city => ({
+    code:city.code,
+    name:city.name,
+    series:months
+      .filter(month => monthMap[month] && monthMap[month][city.code])
+      .map(month => monthMap[month][city.code])
+  }));
+
+  const result = {
+    year:year,
+    cities:cities,
+    months:months,
+    comparisonSeries:comparisonSeries
+  };
+
+  // Payload dashboard kecil, aman untuk ScriptCache bila <95 KB.
+  cacheSmall_(cacheKey, result);
+  return result;
+}
+
+function getDashboardBootstrap_(p) {
+  const years = dashboardYears_();
+
+  if (!years.length) {
+    throw new Error("Data Angka Final belum tersedia.");
+  }
+
+  const requested = String((p && p.year) || "");
+  const year = requested && years.indexOf(requested) >= 0
+    ? requested
+    : String(years[0]);
+
+  const payload = buildDashboardYearPayload_(year);
+
+  return {
+    years:years,
+    year:payload.year,
+    cities:payload.cities,
+    months:payload.months,
+    comparisonSeries:payload.comparisonSeries
+  };
+}
+
+function getDashboardYear_(p) {
+  const years = dashboardYears_();
+  const year = String((p && p.year) || "");
+
+  if (!year || years.indexOf(year) === -1) {
+    throw new Error("Tahun Dashboard tidak tersedia.");
+  }
+
+  const payload = buildDashboardYearPayload_(year);
+
+  return {
+    years:years,
+    year:payload.year,
+    cities:payload.cities,
+    months:payload.months,
+    comparisonSeries:payload.comparisonSeries
+  };
+}
 
 function warmPeriod_(p){
   const source=String(p.source||"");

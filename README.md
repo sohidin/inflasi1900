@@ -391,3 +391,20 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 
 ### Deployment
 - `Code.gs` berubah dan wajib deploy **New version**.
+
+
+## V10.27 — Dashboard Hotfix
+- Memperbaiki bug V10.26: route `dashboardBootstrap` dan `dashboardYear`
+  sudah ada, tetapi fungsi backend-nya tidak ikut masuk ke `Code.gs`.
+- Fungsi berikut dipulihkan:
+  - `dashboardYears_`
+  - `getDashboardYearRows_`
+  - `buildDashboardYearPayload_`
+  - `getDashboardBootstrap_`
+  - `getDashboardYear_`
+- Dashboard tetap **STRICT Flag = 0**.
+- Reader tahunan tetap hanya membaca `B:L`.
+- Ganti wilayah tetap client-side tanpa request API.
+- Cache browser dan optimasi navigasi V10.26 tetap dipertahankan.
+- Error Dashboard sekarang menampilkan pesan backend yang lebih jelas.
+- `Code.gs` wajib deploy ulang sebagai **New version**.

@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbyX_XUcHr-6JjsOOMFkqe10dHM0VS4sbjuykEntydhxqaU4-9HCFK1bVT9Uk_HdVB7D/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbyP617-eHb2PNSCFMLVU5fA9C2vaAvSNXo3DTLMAPbQdJ6HjdiRfQbYaiek4-228xcl/exec"
 };
 
 // ===========================================================================
@@ -702,8 +702,8 @@ async function loadDashboard(){
     startBackgroundPrefetch();
   }catch(err){
     if(!persisted){
-      setDashboardFastStatus("Gagal");
-      showError(err.message||String(err));
+      setDashboardFastStatus("Gagal memuat");
+      showError("Dashboard: " + (err.message||String(err)));
     }else{
       setDashboardFastStatus("Cache aktif");
       startBackgroundPrefetch();
@@ -752,8 +752,8 @@ async function loadDashboardYear(year){
     setDashboardFastStatus("Siap");
   }catch(err){
     if(!persisted){
-      setDashboardFastStatus("Gagal");
-      showError(err.message||String(err));
+      setDashboardFastStatus("Gagal memuat");
+      showError("Dashboard: " + (err.message||String(err)));
     }else{
       setDashboardFastStatus("Cache aktif");
     }
