@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzHQqVYySipLIfzeFJ4iCKhwm3vtHwJJcPSNEHQ-Bn86Rac6N83BXYtRoc5JE_JhNYV/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbyX_XUcHr-6JjsOOMFkqe10dHM0VS4sbjuykEntydhxqaU4-9HCFK1bVT9Uk_HdVB7D/exec"
 };
 
 // ===========================================================================
@@ -104,6 +104,38 @@ async function cachedApi(prefix, params, ttlMs = 120000) {
 
   state._inflightKeys.set(key, promise);
   return promise;
+}
+
+
+// ===========================================================================
+// PERSISTENT FRONTEND CACHE (stale-while-revalidate)
+// ===========================================================================
+const LOCAL_CACHE_VERSION="10.26";
+const LOCAL_TTL={
+  dashboard:6*60*60*1000,
+  filters:6*60*60*1000
+};
+
+function localCacheKey(name){return `inflasi_${LOCAL_CACHE_VERSION}_${name}`;}
+
+function localCacheGet(name,ttl){
+  try{
+    const raw=localStorage.getItem(localCacheKey(name));
+    if(!raw) return null;
+    const obj=JSON.parse(raw);
+    if(!obj || !obj.time) return null;
+    if(Date.now()-obj.time>ttl) return null;
+    return obj.data;
+  }catch(_){return null;}
+}
+
+function localCacheSet(name,data){
+  try{
+    localStorage.setItem(
+      localCacheKey(name),
+      JSON.stringify({time:Date.now(),data})
+    );
+  }catch(_){}
 }
 
 // ===========================================================================
@@ -621,27 +653,69 @@ function makeDashboardData(data){
 async function loadDashboard(){
   state.view="dashboard";state.source="final";
   setDashboardLayout(true);clearError();
-  setDashboardFastStatus("Memuat tahun terbaru…",true);
 
+  // 1) Paint immediately from local cache if available.
+  const persisted=localCacheGet("dashboard_bootstrap",LOCAL_TTL.dashboard);
+  if(persisted?.year && persisted?.comparisonSeries){
+    const data={
+      year:persisted.year,
+      years:persisted.years||[],
+      cities:persisted.cities||[],
+      months:persisted.months||[],
+      comparisonSeries:persisted.comparisonSeries||[]
+    };
+    state.dashboardYearCache.set(String(data.year),data);
+    hydrateDashboardControls(data,data.years||[]);
+    renderDashboardFromYearData();
+    setDashboardFastStatus("Cache siap");
+  }else{
+    setDashboardFastStatus("Memuat data terbaru…",true);
+  }
+
+  // 2) Revalidate in background/current request.
   try{
     const r=await cachedApi("dashboardBootstrap",{action:"dashboardBootstrap"},30*60*1000);
-    const data={year:r.year,years:r.years||[],cities:r.cities||[],months:r.months||[],comparisonSeries:r.comparisonSeries||[]};
+    const data={
+      year:r.year,years:r.years||[],cities:r.cities||[],
+      months:r.months||[],comparisonSeries:r.comparisonSeries||[]
+    };
+
     state.dashboardYearCache.set(String(r.year),data);
-    hydrateDashboardControls(data,r.years||[]);
-    renderDashboardFromYearData();
+    localCacheSet("dashboard_bootstrap",data);
+
+    // Don't unexpectedly change a year the user already selected.
+    const currentYear=valueOf("dashboardYear");
+    if(!currentYear || currentYear===String(r.year)){
+      hydrateDashboardControls(data,r.years||[]);
+      renderDashboardFromYearData();
+    }else{
+      // Refresh only years options while preserving selection.
+      const y=document.getElementById("dashboardYear");
+      if(y){
+        const keep=y.value;
+        fillSelect("dashboardYear",r.years||[]);
+        if([...y.options].some(o=>o.value===keep)) y.value=keep;
+      }
+    }
+
     setDashboardFastStatus("Siap");
     startBackgroundPrefetch();
   }catch(err){
-    setDashboardFastStatus("Gagal");
-    showError(err.message||String(err));
+    if(!persisted){
+      setDashboardFastStatus("Gagal");
+      showError(err.message||String(err));
+    }else{
+      setDashboardFastStatus("Cache aktif");
+      startBackgroundPrefetch();
+    }
   }
 }
 
 async function loadDashboardYear(year){
   year=String(year||"");
   if(!year) return;
-  setDashboardFastStatus(`Memuat ${year}…`,true);
 
+  // Memory cache = instant.
   if(state.dashboardYearCache.has(year)){
     const data=state.dashboardYearCache.get(year);
     hydrateDashboardControls(data,data.years||[]);
@@ -650,16 +724,39 @@ async function loadDashboardYear(year){
     return;
   }
 
+  // Persistent browser cache = near instant after page reload.
+  const persisted=localCacheGet(`dashboard_year_${year}`,LOCAL_TTL.dashboard);
+  if(persisted?.comparisonSeries){
+    state.dashboardYearCache.set(year,persisted);
+    hydrateDashboardControls(persisted,persisted.years||[]);
+    renderDashboardFromYearData();
+    setDashboardFastStatus("Cache siap");
+  }else{
+    setDashboardFastStatus(`Memuat ${year}…`,true);
+  }
+
   try{
     const r=await cachedApi("dashboardYear",{action:"dashboardYear",year},30*60*1000);
-    const data={year:r.year,years:r.years||[],cities:r.cities||[],months:r.months||[],comparisonSeries:r.comparisonSeries||[]};
+    const data={
+      year:r.year,years:r.years||[],cities:r.cities||[],
+      months:r.months||[],comparisonSeries:r.comparisonSeries||[]
+    };
     state.dashboardYearCache.set(year,data);
-    hydrateDashboardControls(data,r.years||[]);
-    renderDashboardFromYearData();
+    localCacheSet(`dashboard_year_${year}`,data);
+
+    // Only repaint if user is still on this requested year.
+    if(valueOf("dashboardYear")===year){
+      hydrateDashboardControls(data,r.years||[]);
+      renderDashboardFromYearData();
+    }
     setDashboardFastStatus("Siap");
   }catch(err){
-    setDashboardFastStatus("Gagal");
-    showError(err.message||String(err));
+    if(!persisted){
+      setDashboardFastStatus("Gagal");
+      showError(err.message||String(err));
+    }else{
+      setDashboardFastStatus("Cache aktif");
+    }
   }
 }
 
@@ -681,19 +778,60 @@ function startBackgroundPrefetch(){
 
   const task=async()=>{
     try{
+      // Seed memory cache instantly from localStorage.
+      ["asem","final"].forEach(source=>{
+        const local=localCacheGet(`filters_${source}`,LOCAL_TTL.filters);
+        if(local){
+          state.filterCache[source]=local;
+          if(source==="final") state.finalFilterCache=local;
+        }
+      });
+
+      // Revalidate both filter sets in parallel.
       const [a,f]=await Promise.all([
         cachedApi("filters",{action:"filters",source:"asem"},20*60*1000),
         cachedApi("filters",{action:"filters",source:"final"},20*60*1000)
       ]);
+
       state.filterCache.asem=a;
       state.filterCache.final=f;
       state.finalFilterCache=f;
+      localCacheSet("filters_asem",a);
+      localCacheSet("filters_final",f);
+
+      // Warm latest-period server cache for both main data sources.
+      const warmFor=async(source,filters)=>{
+        const year=String((filters.years||[])[0]||"");
+        const month=String(((filters.monthsByYear||{})[year]||[])[0]||"");
+        const preferredFlag=(filters.flags||[]).includes("3")
+          ? "3"
+          : String((filters.flags||[])[0]??"");
+        if(!year||!month||preferredFlag==="") return;
+
+        try{
+          await Api.request({
+            action:"warmPeriod",
+            source,year,month,flag:preferredFlag
+          });
+        }catch(_){}
+      };
+
+      // Run warmups without blocking anything user-visible.
+      Promise.all([
+        warmFor("asem",a),
+        warmFor("final",f)
+      ]).catch(()=>{});
+
     }catch(_){}
+
     try{await loadUpdatedAt();}catch(_){}
   };
 
-  if("requestIdleCallback" in window) requestIdleCallback(()=>task(),{timeout:1500});
-  else setTimeout(()=>task(),400);
+  if("requestIdleCallback" in window){
+    requestIdleCallback(()=>task(),{timeout:1200});
+  }else{
+    setTimeout(()=>task(),300);
+  }
 }
 
 function dashboardNumber(v) {
@@ -1301,16 +1439,39 @@ function downloadDashboardExcel() {
 // ===========================================================================
 async function loadSourceFilters() {
   clearError();
-  if (state.filterCache[state.source]) {
-    state.filters = state.filterCache[state.source];
+
+  if(state.filterCache[state.source]){
+    state.filters=state.filterCache[state.source];
     hydrateFilterControlsFromState();
     return;
   }
-  try {
-    state.filters = await cachedApi("filters",{action:"filters",source:state.source},20*60*1000);
-    state.filterCache[state.source] = state.filters;
+
+  const persisted=localCacheGet(`filters_${state.source}`,LOCAL_TTL.filters);
+  if(persisted){
+    state.filterCache[state.source]=persisted;
+    state.filters=persisted;
     hydrateFilterControlsFromState();
-  } catch (err) {
+
+    // Revalidate non-blocking.
+    cachedApi("filters",{action:"filters",source:state.source},20*60*1000)
+      .then(f=>{
+        state.filterCache[state.source]=f;
+        localCacheSet(`filters_${state.source}`,f);
+      })
+      .catch(()=>{});
+    return;
+  }
+
+  try{
+    state.filters=await cachedApi(
+      "filters",
+      {action:"filters",source:state.source},
+      20*60*1000
+    );
+    state.filterCache[state.source]=state.filters;
+    localCacheSet(`filters_${state.source}`,state.filters);
+    hydrateFilterControlsFromState();
+  }catch(err){
     showError(err.message);
     throw err;
   }

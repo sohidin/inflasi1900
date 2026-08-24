@@ -2555,3 +2555,23 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   .dashboard-filter-redesign{flex-direction:column!important;align-items:stretch!important}
   .dashboard-filter-block,.dashboard-filter-primary{min-width:0}
 }
+
+
+/* ===== V10.26 — faster perceived loading ===== */
+.dashboard-fast-status{
+  transition:background .15s ease,color .15s ease,opacity .15s ease;
+}
+.dashboard-fast-status:not(.is-loading){
+  background:rgba(255,255,255,.12)!important;
+}
+.dashboard-fast-status.is-loading{
+  background:rgba(255,208,108,.12)!important;
+}
+
+/* Prevent unnecessary animation cost on big SVGs while switching filters. */
+@media (prefers-reduced-motion:no-preference){
+  .final-series-chart,
+  .comparison-series-chart{
+    transition:opacity .10s linear!important;
+  }
+}

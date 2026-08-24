@@ -363,3 +363,31 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Updated-at tidak lagi memblokir perpindahan menu.
 - Skeleton tabel ditunda 180 ms agar response cache tidak terasa berkedip.
 - `Code.gs` berubah dan harus deploy New version.
+
+
+## V10.26 — Strict Flag 0 + Faster Navigation
+### Dashboard Flag
+- Dashboard sekarang **WAJIB Flag = 0**.
+- Kondisi fallback `commodityCode = 0` atau `UMUM` dihapus dari dashboard.
+
+### Backend Dashboard
+- Reader tahunan Dashboard membaca hanya `B:L` (11 kolom), bukan `A:O` (15 kolom).
+- Tahun tetap dibaca dalam range gabungan sehingga akses Spreadsheet minimum.
+
+### Filter Menu
+- `getFilters_()` mengambil tahun/bulan dari period index yang sudah ada.
+- Backend filter hanya membaca `C:D` dan `G`, bukan `A:D` dan `G`.
+- Mengurangi volume sel cold-load filter.
+
+### Cache Browser
+- Dashboard bootstrap, Dashboard per tahun, dan filter sumber disimpan di `localStorage`.
+- Saat halaman dibuka ulang, cache browser ditampilkan dulu (stale-while-revalidate), lalu data terbaru direfresh di background.
+- Ganti wilayah tetap 100% client-side tanpa Apps Script.
+
+### Prefetch
+- Setelah Dashboard tampil, filter Sementara/Final diprefetch.
+- Latest period kedua sumber di-warm-up di backend melalui `warmPeriod`.
+- Pindah ke menu data terbaru lebih sering langsung mengenai period/pivot cache.
+
+### Deployment
+- `Code.gs` berubah dan wajib deploy **New version**.
