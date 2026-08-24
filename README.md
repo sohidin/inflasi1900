@@ -291,3 +291,16 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Visual header body dibuat tinggi 0, tanpa padding, border, background, teks, dan sorting icon.
 - Header clone di `.dataTables_scrollHead` tetap memakai desain biru V10.20 dan sticky header V10.19.
 - `style.css?v=10.21` dan `script.js?v=10.21` digunakan untuk menghindari cache frontend lama.
+
+
+## V10.22 — Column Width Adjustment
+- Kolom `Nama Komoditas` dipersempit agar tidak terlalu jauh dari kolom wilayah.
+- Proporsi desktop:
+  - Kode Komoditas 9%
+  - Nama Komoditas 31%
+  - masing-masing wilayah 12%
+- Nama komoditas panjang otomatis wrap menjadi beberapa baris.
+- Kolom wilayah dibuat sedikit lebih lega.
+- Sticky header dan desain header biru tetap dipertahankan.
+- PDF/Image visual export mengikuti proporsi kolom baru.
+- Cache frontend dinaikkan menjadi `v=10.22`.
