@@ -13,13 +13,15 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.27"
+  CACHE_VERSION: "v10.31"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
 // Ini penting untuk bulk export: satu blok tahun-bulan hanya dibaca sekali,
 // lalu dipakai ulang oleh 10 sheet workbook.
 const REQUEST_PERIOD_ROWS_ = {};
+
+const REQUEST_FILTERS_ = {};
 
 function doGet(e) {
   try {
@@ -172,60 +174,276 @@ function getPeriodRows_(source,year,month){
 }
 
 function getFilters_(source) {
+
+  if (REQUEST_FILTERS_[source]) return REQUEST_FILTERS_[source];  const cache = CacheService.getScriptCache();
+  const key = CONFIG.CACHE_VERSION + ":filters:" + source;
+  const cached = cache.get(key);
+  if (cached) return JSON.parse(cached);
+
+  const obj = sheet_(source);
+  const sh = obj.sh;
+  const cfg = obj.cfg;
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return {years:[],flags:[],cities:[],monthsByYear:{}};
+
+  // Metadata filter: baca A:D dan G saja. Tidak perlu E:F.
+  const mainMeta = sh.getRange(2,1,lastRow-1,4).getDisplayValues();
+  const flagMeta = sh.getRange(2,7,lastRow-1,1).getDisplayValues();
+
+  const years = {};
+  const monthsByYear = {};
+  const flags = {};
+  const cities = {};
+
+  mainMeta.forEach((r,i) => {
+    const y=clean_(r[0]), m=clean_(r[1]), code=clean_(r[2]), name=clean_(r[3]);
+    const flag=clean_(flagMeta[i] ? flagMeta[i][0] : "");
+    if(y){
+      years[y]=true;
+      if(!monthsByYear[y]) monthsByYear[y]={};
+      if(m) monthsByYear[y][m]=true;
+    }
+    if(flag!=="") flags[flag]=true;
+    if(code) cities[code]=name;
+  });
+
+  const result = {
+    years:Object.keys(years).sort((a,b)=>Number(b)-Number(a)),
+    flags:Object.keys(flags).sort(numericSort_),
+    cities:Object.keys(cities).sort(numericSort_).map(code=>({code:code,name:cities[code]})),
+    monthsByYear:{}
+  };
+
+  Object.keys(monthsByYear).forEach(y=>{
+    result.monthsByYear[y]=Object.keys(monthsByYear[y]).sort(numericSort_);
+  });
+
+  try{
+    const txt=JSON.stringify(result);
+    if(txt.length<95000) cache.put(key,txt,CONFIG.FILTER_CACHE_SECONDS);
+  }catch(e){}
+
+  return result;
+}
+
+function getPivotTable_(p) {
+  const source = String(p.source || "");
+  const period = String(p.period || "").toLowerCase();
+  const view = String(p.view || "").toLowerCase();
+  const year = String(p.year || "");
+  const month = String(p.month || "");
+  const flag = String(p.flag || "");
+
+  if (!year || !month || flag === "") throw new Error("Tahun, bulan, dan flag harus dipilih.");
+
+  const cache = CacheService.getScriptCache();
+  const key = [CONFIG.CACHE_VERSION,"pivot",source,period,view,year,month,flag].join(":");
+  const cached = cache.get(key);
+  if(cached) return JSON.parse(cached);
+
+  const cfg = sourceConfig_(source);
+  const c = cfg.cols;
+  const metricCol = metricColumn_(c, period, view);
+  const rows = getPeriodRows_(source, year, month);
+
+  const cityMap = {};
+  const commodityMap = {};
+  const matrix = {};
+
+  rows.forEach(r => {
+    if (clean_(r[c.flag-1]) !== flag) return;
+
+    const cityCode=clean_(r[c.cityCode-1]);
+    const cityName=clean_(r[c.cityName-1]);
+    const commodityCode=clean_(r[c.commodityCode-1]);
+    const commodityName=clean_(r[c.commodityName-1]);
+    if(!cityCode || !commodityCode) return;
+
+    cityMap[cityCode]=cityName;
+    commodityMap[commodityCode]=commodityName;
+    if(!matrix[commodityCode]) matrix[commodityCode]={};
+    matrix[commodityCode][cityCode]=toNumber_(r[metricCol-1]);
+  });
+
+  // Urutan kab/kota utama sesuai kebutuhan dashboard.
+  const preferredCities=["1902","1903","1906","1971","1900"];
+  const cityCodes=preferredCities.filter(code=>cityMap[code]);
+  Object.keys(cityMap)
+    .filter(code=>preferredCities.indexOf(code)===-1)
+    .sort(numericSort_)
+    .forEach(code=>cityCodes.push(code));
+
+  const commodityCodes=Object.keys(commodityMap).sort(numericSort_);
+
+  const result = {
+    title:labelView_(view,period),
+    info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month+" • Flag "+flag,
+    columns:["Kode Komoditas","Nama Komoditas"].concat(cityCodes.map(code=>code+" - "+cityMap[code])),
+    rows:commodityCodes.map(code=>{
+      const out=[code,commodityMap[code]];
+      cityCodes.forEach(city=>out.push(
+        matrix[code] && Object.prototype.hasOwnProperty.call(matrix[code],city) ? matrix[code][city] : null
+      ));
+      return out;
+    })
+  };
+
+  REQUEST_FILTERS_[source]=result;
+  cacheSmall_(key,result);
+  return result;
+}
+
+
+function dashboardYears_() {
+  const index=getPeriodIndex_("final"), years={};
+  Object.keys(index).forEach(k=>{
+    const y=String(k).split("|")[0];
+    if(y) years[y]=true;
+  });
+  return Object.keys(years).sort((a,b)=>Number(b)-Number(a));
+}
+
+function getDashboardYearRows_(year) {
+  const memoKey="dashYear|"+year;
+  if(Object.prototype.hasOwnProperty.call(REQUEST_PERIOD_ROWS_,memoKey)){
+    return REQUEST_PERIOD_ROWS_[memoKey];
+  }
+
+  const obj=sheet_("final"), index=getPeriodIndex_("final"), ranges=[];
+  Object.keys(index).forEach(k=>{
+    const parts=String(k).split("|");
+    if(parts[0]!==String(year)) return;
+    (index[k]||[]).forEach(seg=>{
+      ranges.push({start:Number(seg.start),end:Number(seg.start)+Number(seg.count)-1});
+    });
+  });
+  if(!ranges.length) return [];
+
+  ranges.sort((a,b)=>a.start-b.start);
+  const merged=[];
+  ranges.forEach(r=>{
+    const last=merged[merged.length-1];
+    if(last && r.start<=last.end+1) last.end=Math.max(last.end,r.end);
+    else merged.push({start:r.start,end:r.end});
+  });
+
+  let rows=[];
+  merged.forEach(r=>{
+    rows=rows.concat(
+      obj.sh.getRange(r.start,1,r.end-r.start+1,obj.cfg.lastCol).getDisplayValues()
+    );
+  });
+
+  const c=obj.cfg.cols;
+  rows=rows.filter(r=>clean_(r[c.year-1])===String(year));
+  REQUEST_PERIOD_ROWS_[memoKey]=rows;
+  return rows;
+}
+
+function buildDashboardYearPayload_(year) {
   const cache=CacheService.getScriptCache();
-  const key=CONFIG.CACHE_VERSION+":filters:"+source;
+  const key=CONFIG.CACHE_VERSION+":dashboardPayload:"+year;
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);
 
-  const obj=sheet_(source), sh=obj.sh, lastRow=sh.getLastRow();
-  if(lastRow<2) return {years:[],flags:[],cities:[],monthsByYear:{}};
+  const cfg=sourceConfig_("final"), c=cfg.cols, rows=getDashboardYearRows_(year);
 
-  // Years/months are already available in period index (A:B scan).
-  // Dashboard warms this index first, so menu filter loading is usually cache-only.
-  const periodIndex=getPeriodIndex_(source);
-  const yearsMap={}, monthsByYear={};
-
-  Object.keys(periodIndex).forEach(k=>{
-    const parts=String(k).split("|");
-    const y=parts[0], m=parts[1];
-    if(!y) return;
-    yearsMap[y]=true;
-    if(!monthsByYear[y]) monthsByYear[y]={};
-    if(m) monthsByYear[y][m]=true;
-  });
-
-  // Only C:D and G are still needed (3 columns instead of A:D + G = 5 columns).
-  const cityMeta=sh.getRange(2,3,lastRow-1,2).getDisplayValues();
-  const flagMeta=sh.getRange(2,7,lastRow-1,1).getDisplayValues();
-
-  const citiesMap={}, flagsMap={};
-  for(let i=0;i<cityMeta.length;i++){
-    const code=clean_(cityMeta[i][0]);
-    const name=clean_(cityMeta[i][1]);
-    const flag=clean_(flagMeta[i] ? flagMeta[i][0] : "");
-    if(code && !citiesMap[code]) citiesMap[code]=name;
-    if(flag!=="") flagsMap[flag]=true;
+  function normCode_(v){
+    const x=clean_(v);
+    return (x==="19"||x==="1900")?"1900":x;
   }
 
-  const years=Object.keys(yearsMap).sort((a,b)=>Number(b)-Number(a));
-  const resultMonths={};
-  years.forEach(y=>{
-    resultMonths[y]=Object.keys(monthsByYear[y]||{}).sort((a,b)=>Number(b)-Number(a));
+  const cityMap={}, monthMap={};
+  rows.forEach(r=>{
+    const flag=clean_(r[c.flag-1]);
+
+    // Dashboard hanya menggunakan Flag 0.
+    if(flag!=="0") return;
+
+    const month=clean_(r[c.month-1]), code=normCode_(r[c.cityCode-1]);
+    if(!month||!code) return;
+
+    cityMap[code]=clean_(r[c.cityName-1])||code;
+    if(!monthMap[month]) monthMap[month]={};
+    monthMap[month][code]={
+      month:month,
+      mtm:toNumber_(r[c.inflasiMtm-1]),
+      ytd:toNumber_(r[c.inflasiYtd-1]),
+      yoy:toNumber_(r[c.inflasiYoy-1])
+    };
   });
 
-  const flags=Object.keys(flagsMap).sort(numericSort_);
-  const preferred=["1902","1903","1906","1971","1900","19"];
-  const cityCodes=preferred.filter((x,i)=>citiesMap[x] && preferred.indexOf(x)===i);
-  Object.keys(citiesMap)
-    .filter(x=>preferred.indexOf(x)===-1)
-    .sort(numericSort_)
-    .forEach(x=>cityCodes.push(x));
+  const preferred=["1900","1902","1903","1906","1971"];
+  const codes=preferred.filter(c=>cityMap[c]);
+  Object.keys(cityMap).filter(c=>preferred.indexOf(c)===-1).sort(numericSort_).forEach(c=>codes.push(c));
+
+  const cities=codes.map(code=>({code:code,name:cityMap[code]}));
+  const months=Object.keys(monthMap).sort(numericSort_);
+  const comparisonSeries=cities.map(city=>({
+    code:city.code,
+    name:city.name,
+    series:months.filter(m=>monthMap[m]&&monthMap[m][city.code]).map(m=>monthMap[m][city.code])
+  }));
+
+  const result={year:String(year),cities:cities,months:months,comparisonSeries:comparisonSeries};
+  cacheSmall_(key,result);
+  return result;
+}
+
+function getDashboardBootstrap_(p){
+  const years=dashboardYears_();
+  const requested=String(p.year||"");
+  const year=requested&&years.indexOf(requested)>=0?requested:String(years[0]||"");
+  if(!year) throw new Error("Data Angka Final belum tersedia.");
+  return {years:years,...buildDashboardYearPayload_(year)};
+}
+
+function getDashboardYear_(p){
+  const years=dashboardYears_(), year=String(p.year||"");
+  if(!year||years.indexOf(year)===-1) throw new Error("Tahun Dashboard tidak tersedia.");
+  return {years:years,...buildDashboardYearPayload_(year)};
+}
+
+function getHeadline_(p) {
+  const source=String(p.source||"");
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  if(!year||!month) throw new Error("Tahun dan bulan harus dipilih.");
+
+  const key=[CONFIG.CACHE_VERSION,"headline",source,year,month].join(":");
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
+
+  const cfg=sourceConfig_(source);
+  const c=cfg.cols;
+  const rows=getPeriodRows_(source,year,month);
+
+  const resultRows=[];
+  rows.forEach(r=>{
+    const flag=clean_(r[c.flag-1]);
+
+    // KHUSUS Inflasi Asem dan Inflasi Final:
+    // headline wajib membaca Flag = 0.
+    // Menu lainnya tetap menggunakan pilihan Flag masing-masing.
+    if(flag!=="0") return;
+
+    resultRows.push([
+      clean_(r[c.cityCode-1]),
+      clean_(r[c.cityName-1]),
+      toNumber_(r[c.inflasiMtm-1]),
+      toNumber_(r[c.inflasiYtd-1]),
+      toNumber_(r[c.inflasiYoy-1])
+    ]);
+  });
+
+  resultRows.sort((a,b)=>numericSort_(a[0],b[0]));
 
   const result={
-    years:years,
-    flags:flags,
-    cities:cityCodes.map(code=>({code:code,name:citiesMap[code]})),
-    monthsByYear:resultMonths
+    title:source==="asem"?"Inflasi Asem":"Inflasi Final",
+    info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month,
+    columns:["Kode Kota","Nama Kota","Inflasi MtM","Inflasi YtD","Inflasi YoY"],
+    rows:resultRows
   };
 
   cacheSmall_(key,result);
@@ -233,215 +451,284 @@ function getFilters_(source) {
 }
 
 
+function getHeadlineCompare_(p) {
+  const asemYear=String(p.asemYear||"");
+  const asemMonth=String(p.asemMonth||"");
+  const finalYear=String(p.finalYear||"");
+  const finalMonth=String(p.finalMonth||"");
 
-/* ==========================================================================
-   V10.27 HOTFIX — DASHBOARD BACKEND
-   Dashboard WAJIB Flag = 0.
-   Data tahunan dibaca ringkas dari B:L, lalu seluruh wilayah dikembalikan
-   sekaligus agar ganti wilayah di browser tidak membutuhkan request baru.
-   ========================================================================== */
-
-function dashboardYears_() {
-  const index = getPeriodIndex_("final");
-  const years = {};
-
-  Object.keys(index || {}).forEach(k => {
-    const y = String(k).split("|")[0];
-    if (y) years[y] = true;
-  });
-
-  return Object.keys(years).sort((a,b) => Number(b) - Number(a));
-}
-
-function getDashboardYearRows_(year) {
-  year = String(year || "");
-  if (!year) return [];
-
-  const memoKey = "dashboardYearCompact|" + year;
-  if (Object.prototype.hasOwnProperty.call(REQUEST_PERIOD_ROWS_, memoKey)) {
-    return REQUEST_PERIOD_ROWS_[memoKey];
+  if(!asemYear||!asemMonth||!finalYear||!finalMonth){
+    throw new Error("Periode angka sementara dan periode final pembanding harus dipilih.");
   }
 
-  const obj = sheet_("final");
-  const index = getPeriodIndex_("final");
-  const ranges = [];
+  const key=[
+    CONFIG.CACHE_VERSION,"headlineCompare",
+    asemYear,asemMonth,finalYear,finalMonth
+  ].join(":");
 
-  Object.keys(index || {}).forEach(k => {
-    const parts = String(k).split("|");
-    if (parts[0] !== year) return;
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
 
-    (index[k] || []).forEach(seg => {
-      const start = Number(seg.start);
-      const count = Number(seg.count);
-      if (start > 0 && count > 0) {
-        ranges.push({
-          start:start,
-          end:start + count - 1
-        });
-      }
-    });
-  });
+  const asem=getHeadline_({source:"asem",year:asemYear,month:asemMonth});
+  const fin=getHeadline_({source:"final",year:finalYear,month:finalMonth});
 
-  if (!ranges.length) {
-    REQUEST_PERIOD_ROWS_[memoKey] = [];
-    return [];
+  function normCode_(code){
+    code=clean_(code);
+    return (code==="1900"||code==="19") ? "19" : code;
   }
 
-  ranges.sort((a,b) => a.start - b.start);
+  const map={};
 
-  // Gabungkan range yang berdempetan supaya 1 tahun biasanya hanya 1 read.
-  const merged = [];
-  ranges.forEach(r => {
-    const last = merged[merged.length - 1];
-    if (last && r.start <= last.end + 1) {
-      last.end = Math.max(last.end, r.end);
-    } else {
-      merged.push({start:r.start, end:r.end});
-    }
+  (fin.rows||[]).forEach(r=>{
+    const k=normCode_(r[0]);
+    if(!map[k]) map[k]={};
+    map[k].code=k;
+    map[k].finalName=r[1];
+    map[k].final=[r[2],r[3],r[4]];
   });
 
-  let rows = [];
-
-  merged.forEach(r => {
-    const count = r.end - r.start + 1;
-
-    // Hanya B:L (11 kolom), bukan A:O.
-    // Mapping 0-based:
-    // 0=B Bulan
-    // 1=C Kode Kota
-    // 2=D Nama Kota
-    // 5=G Flag
-    // 8=J Inflasi MtM
-    // 9=K Inflasi YtD
-    // 10=L Inflasi YoY
-    rows = rows.concat(
-      obj.sh.getRange(r.start, 2, count, 11).getDisplayValues()
-    );
+  (asem.rows||[]).forEach(r=>{
+    const k=normCode_(r[0]);
+    if(!map[k]) map[k]={};
+    map[k].code=k;
+    map[k].asemName=r[1];
+    map[k].asem=[r[2],r[3],r[4]];
   });
 
-  REQUEST_PERIOD_ROWS_[memoKey] = rows;
-  return rows;
-}
-
-function buildDashboardYearPayload_(year) {
-  year = String(year || "");
-  if (!year) throw new Error("Tahun Dashboard belum dipilih.");
-
-  const cache = CacheService.getScriptCache();
-  const cacheKey = CONFIG.CACHE_VERSION + ":dashboardPayload:" + year;
-  const cached = cache.get(cacheKey);
-
-  if (cached) return JSON.parse(cached);
-
-  const rows = getDashboardYearRows_(year);
-
-  function normCode_(v) {
-    const x = clean_(v);
-    return (x === "19" || x === "1900") ? "1900" : x;
-  }
-
-  const cityMap = {};
-  const monthMap = {};
-
-  rows.forEach(r => {
-    // STRICT: Dashboard hanya Flag 0.
-    const flag = clean_(r[5]);
-    if (flag !== "0") return;
-
-    const month = clean_(r[0]);
-    const cityCode = normCode_(r[1]);
-    const cityName = clean_(r[2]);
-
-    if (!month || !cityCode) return;
-
-    cityMap[cityCode] = cityName || cityCode;
-
-    if (!monthMap[month]) monthMap[month] = {};
-
-    monthMap[month][cityCode] = {
-      month:month,
-      mtm:toNumber_(r[8]),
-      ytd:toNumber_(r[9]),
-      yoy:toNumber_(r[10])
-    };
-  });
-
-  const preferred = ["1900","1902","1903","1906","1971"];
-  const cityCodes = preferred.filter(code => cityMap[code]);
-
-  Object.keys(cityMap)
-    .filter(code => preferred.indexOf(code) === -1)
+  const preferred=["1902","1903","1906","1971","19"];
+  const keys=preferred.filter(k=>map[k]);
+  Object.keys(map)
+    .filter(k=>preferred.indexOf(k)===-1)
     .sort(numericSort_)
-    .forEach(code => cityCodes.push(code));
+    .forEach(k=>keys.push(k));
 
-  const cities = cityCodes.map(code => ({
-    code:code,
-    name:cityMap[code]
-  }));
+  const rows=keys.map(k=>{
+    const x=map[k];
+    const f=x.final||[null,null,null];
+    const a=x.asem||[null,null,null];
+    return [
+      x.code,
+      x.asemName||x.finalName||"",
+      f[0],f[1],f[2],
+      a[0],a[1],a[2]
+    ];
+  });
 
-  const months = Object.keys(monthMap).sort(numericSort_);
-
-  const comparisonSeries = cities.map(city => ({
-    code:city.code,
-    name:city.name,
-    series:months
-      .filter(month => monthMap[month] && monthMap[month][city.code])
-      .map(month => monthMap[month][city.code])
-  }));
-
-  const result = {
-    year:year,
-    cities:cities,
-    months:months,
-    comparisonSeries:comparisonSeries
+  const result={
+    title:"Inflasi Asem vs Inflasi Final",
+    info:"Final "+finalYear+"-"+finalMonth+
+      " • dibandingkan dengan Angka Sementara "+asemYear+"-"+asemMonth,
+    finalPeriod:{year:finalYear,month:finalMonth},
+    asemPeriod:{year:asemYear,month:asemMonth},
+    columns:[
+      "Kode Kota","Nama Kota",
+      "Final MtM","Final YtD","Final YoY",
+      "Sementara MtM","Sementara YtD","Sementara YoY"
+    ],
+    rows:rows
   };
 
-  // Payload dashboard kecil, aman untuk ScriptCache bila <95 KB.
-  cacheSmall_(cacheKey, result);
+  cacheSmall_(key,result);
   return result;
 }
 
-function getDashboardBootstrap_(p) {
-  const years = dashboardYears_();
+function getCommodity_(p) {
+  const source=String(p.source||"");
+  const period=String(p.period||"").toLowerCase();
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  const flag=String(p.flag||"");
+  const mode=String(p.mode||"top10");
 
-  if (!years.length) {
-    throw new Error("Data Angka Final belum tersedia.");
-  }
+  if(!year||!month||flag==="") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
-  const requested = String((p && p.year) || "");
-  const year = requested && years.indexOf(requested) >= 0
-    ? requested
-    : String(years[0]);
+  const key=[CONFIG.CACHE_VERSION,"commodityAll",source,period,year,month,flag,mode].join(":");
+  const cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached) return JSON.parse(cached);
 
-  const payload = buildDashboardYearPayload_(year);
+  const cfg=sourceConfig_(source);
+  const c=cfg.cols;
+  const metricCol=metricColumn_(c,period,"andil");
+  const rows=getPeriodRows_(source,year,month);
+
+  const cityMap={};
+
+  rows.forEach(r=>{
+    if(clean_(r[c.flag-1])!==flag) return;
+
+    const cityCode=clean_(r[c.cityCode-1]);
+    const cityName=clean_(r[c.cityName-1]);
+    const code=clean_(r[c.commodityCode-1]);
+    const name=clean_(r[c.commodityName-1]);
+    const value=toNumber_(r[metricCol-1]);
+
+    if(!cityCode||!code||!name||value===null) return;
+
+    if(!cityMap[cityCode]) cityMap[cityCode]={code:cityCode,name:cityName,items:[]};
+    cityMap[cityCode].items.push({code:code,name:name,value:value});
+  });
+
+  // Urutan prioritas sesuai permintaan.
+  const preferred=["1902","1903","1906","1971","1900"];
+  const allCodes=Object.keys(cityMap);
+  const ordered=preferred.filter(x=>cityMap[x]);
+
+  allCodes
+    .filter(x=>preferred.indexOf(x)===-1)
+    .sort(numericSort_)
+    .forEach(x=>ordered.push(x));
+
+  const cities=ordered.map(cityCode=>{
+    const city=cityMap[cityCode];
+    const lows=city.items.filter(x=>x.value<0).sort((a,b)=>a.value-b.value);
+    const highs=city.items.filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
+
+    const lowFinal =
+      mode==="all" ? lows :
+      mode==="threshold" ? lows.filter(x=>x.value<=-0.01) :
+      lows.slice(0,10);
+
+    const highFinal =
+      mode==="all" ? highs :
+      mode==="threshold" ? highs.filter(x=>x.value>=0.01) :
+      highs.slice(0,10);
+
+    return {
+      code:city.code,
+      name:city.name,
+      lowest:lowFinal.map((x,i)=>[i+1,x.code,x.name,x.value]),
+      highest:highFinal.map((x,i)=>[i+1,x.code,x.name,x.value])
+    };
+  });
+
+  const result={cities:cities};
+  cacheSmall_(key,result);
+  return result;
+}
+
+
+function flattenCommodityForBulk_(commodityResult){
+  const rows=[];
+  (commodityResult.cities||[]).forEach(city=>{
+    (city.lowest||[]).forEach(r=>{
+      rows.push([
+        city.code,city.name,"Terendah",
+        r[0],r[1],r[2],r[3]
+      ]);
+    });
+    (city.highest||[]).forEach(r=>{
+      rows.push([
+        city.code,city.name,"Tertinggi",
+        r[0],r[1],r[2],r[3]
+      ]);
+    });
+  });
 
   return {
-    years:years,
-    year:payload.year,
-    cities:payload.cities,
-    months:payload.months,
-    comparisonSeries:payload.comparisonSeries
+    columns:[
+      "Kode Kota","Nama Kota","Kelompok","No",
+      "Kode Komoditas","Nama Komoditas","Andil"
+    ],
+    rows:rows
   };
 }
 
-function getDashboardYear_(p) {
-  const years = dashboardYears_();
-  const year = String((p && p.year) || "");
-
-  if (!year || years.indexOf(year) === -1) {
-    throw new Error("Tahun Dashboard tidak tersedia.");
-  }
-
-  const payload = buildDashboardYearPayload_(year);
-
+function sheetPayload_(name,result){
   return {
-    years:years,
-    year:payload.year,
-    cities:payload.cities,
-    months:payload.months,
-    comparisonSeries:payload.comparisonSeries
+    name:name,
+    title:result.title||name,
+    info:result.info||"",
+    columns:result.columns||[],
+    rows:result.rows||[]
   };
 }
+
+function getBulkExport_(p){
+  const source=String(p.source||"");
+  const year=String(p.year||"");
+  const month=String(p.month||"");
+  const flag=String(p.flag||"");
+
+  if(source!=="asem" && source!=="final"){
+    throw new Error("Sumber bulk export tidak valid.");
+  }
+  if(!year||!month||flag===""){
+    throw new Error("Tahun, bulan, dan flag harus dipilih.");
+  }
+
+  // Warm-up satu kali. Setelah ini semua fungsi lain memakai REQUEST_PERIOD_ROWS_.
+  getPeriodRows_(source,year,month);
+
+  const sheets=[];
+  const periods=[
+    {key:"mtm",label:"MtM"},
+    {key:"ytd",label:"YtD"},
+    {key:"yoy",label:"YoY"}
+  ];
+
+  periods.forEach(period=>{
+    const inflasi=getPivotTable_({
+      source:source,period:period.key,view:"inflasi",
+      year:year,month:month,flag:flag
+    });
+    sheets.push(sheetPayload_(period.label+" - Inflasi",inflasi));
+
+    const andil=getPivotTable_({
+      source:source,period:period.key,view:"andil",
+      year:year,month:month,flag:flag
+    });
+    sheets.push(sheetPayload_(period.label+" - Andil",andil));
+
+    // Bulk berarti SEMUA komoditas positif/negatif, bukan hanya Top 10.
+    const commodity=getCommodity_({
+      source:source,period:period.key,
+      year:year,month:month,flag:flag,mode:"all"
+    });
+    const flat=flattenCommodityForBulk_(commodity);
+    sheets.push({
+      name:period.label+" - Komoditas",
+      title:"Komoditas Andil "+period.label,
+      info:sourceLabel_(source)+" • Tahun "+year+" • Bulan "+month+" • Flag "+flag,
+      columns:flat.columns,
+      rows:flat.rows
+    });
+  });
+
+  if(source==="asem"){
+    const finalYear=String(p.finalYear||"");
+    const finalMonth=String(p.finalMonth||"");
+
+    if(finalYear && finalMonth){
+      const cmp=getHeadlineCompare_({
+        asemYear:year,asemMonth:month,
+        finalYear:finalYear,finalMonth:finalMonth
+      });
+      sheets.push(sheetPayload_("Inflasi Asem",cmp));
+    }else{
+      const headline=getHeadline_({
+        source:"asem",year:year,month:month
+      });
+      sheets.push(sheetPayload_("Inflasi Asem",headline));
+    }
+  }else{
+    const headline=getHeadline_({
+      source:"final",year:year,month:month
+    });
+    sheets.push(sheetPayload_("Inflasi Final",headline));
+  }
+
+  return {
+    source:source,
+    sourceLabel:sourceLabel_(source),
+    year:year,
+    month:month,
+    flag:flag,
+    sheets:sheets
+  };
+}
+
 
 function warmPeriod_(p){
   const source=String(p.source||"");
@@ -453,9 +740,6 @@ function warmPeriod_(p){
     return {warmed:false};
   }
 
-  // One cheap pivot request warms:
-  // - period rows cache
-  // - pivot result cache
   getPivotTable_({
     source:source,
     period:"mtm",

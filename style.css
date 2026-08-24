@@ -3042,3 +3042,50 @@ table,
     font-size:12.3px!important;
   }
 }
+
+
+/* ==========================================================================
+   V10.30 — HEADLINE FLAG 0
+   Flag disembunyikan hanya di Inflasi Asem dan Inflasi Final.
+   ========================================================================== */
+.headline-flag-hidden{
+  display:none!important;
+}
+
+/* Tahun/Bulan tetap rapih ketika Flag tidak ada */
+#filterCard{
+  align-items:flex-end;
+}
+
+
+/* ==========================================================================
+   V10.31 — PERFORMANCE TUNING
+   ========================================================================== */
+
+/* Reduce expensive blur/shadow painting while keeping same visual feel */
+.dashboard-welcome-card,
+.dashboard-chart-card,
+.dashboard-insight-card,
+.comparison-chart-card,
+.data-card,
+.filter-card{
+  box-shadow:0 8px 22px rgba(30,70,100,.055)!important;
+}
+
+/* Backdrop-filter is costly on some integrated GPUs; use solid translucent bg */
+.dashboard-control-panel{
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+
+/* Avoid repaint-heavy transition on large tables */
+table,
+.dataTable,
+.dataTables_scrollBody{
+  transition:none!important;
+}
+
+/* Keep menu transitions lightweight */
+.sidebar button{
+  transition:background-color .12s ease,color .12s ease,border-color .12s ease!important;
+}

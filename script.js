@@ -26,6 +26,9 @@ const state = {
   dashboardYearCache: new Map(),
   dashboardSelectedCity: "1900",
   _prefetchStarted: false,
+  _viewCache: new Map(),
+  _viewInflight: new Map(),
+  _lastViewKey: "",
   pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 
   // [OPT-1] Prefetch queue — menyimpan permintaan filter/data yang sedang berjalan
@@ -110,10 +113,10 @@ async function cachedApi(prefix, params, ttlMs = 120000) {
 // ===========================================================================
 // PERSISTENT FRONTEND CACHE (stale-while-revalidate)
 // ===========================================================================
-const LOCAL_CACHE_VERSION="10.26";
+const LOCAL_CACHE_VERSION="10.31";
 const LOCAL_TTL={
-  dashboard:6*60*60*1000,
-  filters:6*60*60*1000
+  dashboard:12*60*60*1000,
+  filters:12*60*60*1000
 };
 
 function localCacheKey(name){return `inflasi_${LOCAL_CACHE_VERSION}_${name}`;}
@@ -246,6 +249,7 @@ function bindAccordion() {
 }
 
 async function handleLeafClick(btn) {
+  state._lastViewKey="";
   document.getElementById("dashboardMenuBtn")?.classList.remove("active");
   document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
   btn.classList.add("active");
@@ -274,6 +278,7 @@ async function handleLeafClick(btn) {
 // ===========================================================================
 function bindAppEvents() {
   document.getElementById("applyFilterBtn").addEventListener("click", async () => {
+    state._lastViewKey="";
     if (state.source === "asem" && state.view === "headline") {
       await ensureFinalComparisonFilters();
     }
@@ -821,6 +826,8 @@ function startBackgroundPrefetch(){
         warmFor("asem",a),
         warmFor("final",f)
       ]).catch(()=>{});
+
+      prefetchLikelyCurrentView();
 
     }catch(_){}
 
@@ -1568,47 +1575,120 @@ function updateCompareFinalMonths() {
   }
 }
 
+
+function stableViewKey(action,args){
+  const keys=Object.keys(args||{}).sort();
+  return [action,...keys.map(k=>`${k}=${String(args[k]??"")}`)].join("|");
+}
+
+async function cachedViewRequest(action,args,ttl=10*60*1000){
+  const key=stableViewKey(action,args);
+
+  // Memory cache first
+  const hit=state._viewCache.get(key);
+  if(hit && Date.now()-hit.time<ttl){
+    return hit.data;
+  }
+
+  // Deduplicate simultaneous requests
+  if(state._viewInflight.has(key)){
+    return state._viewInflight.get(key);
+  }
+
+  const promise=cachedApi(action,args,ttl)
+    .then(data=>{
+      state._viewCache.set(key,{time:Date.now(),data});
+      state._viewInflight.delete(key);
+      return data;
+    })
+    .catch(err=>{
+      state._viewInflight.delete(key);
+      throw err;
+    });
+
+  state._viewInflight.set(key,promise);
+  return promise;
+}
+
+function prefetchLikelyCurrentView(){
+  // Warm the most likely first table after dashboard is visible.
+  const source="final";
+  const f=state.filterCache[source];
+  if(!f) return;
+
+  const year=String((f.years||[])[0]||"");
+  const month=String(((f.monthsByYear||{})[year]||[])[0]||"");
+  const flag=(f.flags||[]).includes("3")?"3":String((f.flags||[])[0]||"");
+
+  if(!year||!month||flag==="") return;
+
+  const args={
+    action:"table",
+    source,
+    period:"mtm",
+    view:"inflasi",
+    year,
+    month,
+    flag
+  };
+
+  cachedViewRequest("table",args,15*60*1000).catch(()=>{});
+}
+
 // ===========================================================================
 // LOAD VIEW
 // ===========================================================================
 async function loadCurrentView() {
   updateUI();
   clearError();
-  let loadingTimer=setTimeout(()=>showLoading(true),180);
+  let loadingTimer=setTimeout(()=>showLoading(true),260);
 
   const args = {
     source: state.source,
     period: state.period,
     year: valueOf("filterYear"),
     month: valueOf("filterMonth"),
-    flag: valueOf("filterFlag")
+    // Khusus Inflasi Asem / Inflasi Final: Flag selalu 0.
+    // Semua menu lain tetap menggunakan dropdown Flag.
+    flag: state.view === "headline" ? "0" : valueOf("filterFlag")
   };
+  const currentViewKey=stableViewKey(state.view,args);
+  if(state._lastViewKey===currentViewKey && state.view!=="komoditas"){
+    clearTimeout(loadingTimer);
+    showLoading(false);
+    return;
+  }
+
 
   try {
     let r;
     if (state.view === "headline" && state.source === "asem") {
       await ensureFinalComparisonFilters();
-      r = await cachedApi("headlineCompare", {
+      r = await cachedViewRequest("headlineCompare", {
         action: "headlineCompare",
         asemYear: valueOf("filterYear"),
         asemMonth: valueOf("filterMonth"),
         finalYear: valueOf("compareFinalYear"),
         finalMonth: valueOf("compareFinalMonth")
-      }, 300000);
+      }, 15*60*1000);
       state.comparisonData = r;
       renderComparisonTable(r);
+      state._lastViewKey=currentViewKey;
     } else if (state.view === "headline") {
-      r = await cachedApi("headline", { action: "headline", ...args }, 300000);
+      r = await cachedViewRequest("headline", { action: "headline", ...args }, 15*60*1000);
       state.comparisonData = null;
       state.finalHeadlineData = r;
       renderFinalHeadlineTable(r);
+      state._lastViewKey=currentViewKey;
     } else if (state.view === "komoditas") {
-      r = await cachedApi("commodity", { action: "commodity", ...args, mode: valueOf("commodityMode") }, 300000);
+      r = await cachedViewRequest("commodity", { action: "commodity", ...args, mode: valueOf("commodityMode") }, 15*60*1000);
       renderCommodity(r);
+      state._lastViewKey=currentViewKey+"|mode="+valueOf("commodityMode");
     } else {
-      r = await cachedApi("table", { action: "table", view: state.view, ...args }, 300000);
+      r = await cachedViewRequest("table", { action: "table", view: state.view, ...args }, 15*60*1000);
       renderStandard(r);
     }
+    state._lastViewKey=currentViewKey;
   } catch (err) { showError(err.message); }
   finally {
     clearTimeout(loadingTimer);
@@ -1619,7 +1699,19 @@ async function loadCurrentView() {
 // ===========================================================================
 // UI HELPERS
 // ===========================================================================
+
+function updateHeadlineFlagUi(){
+  const isHeadline = state.view === "headline";
+
+  document.getElementById("filterFlagItem")
+    ?.classList.toggle("headline-flag-hidden", isHeadline);
+
+  document.getElementById("statFlagCard")
+    ?.classList.toggle("headline-flag-hidden", isHeadline);
+}
+
 function updateUI() {
+  updateHeadlineFlagUi();
   if(state.view === "dashboard"){
     setDashboardLayout(true);
     return;
@@ -1641,7 +1733,7 @@ function updateUI() {
   document.getElementById("statSource").textContent = state.source === "asem" ? "Angka Sementara" : "Angka Final";
   document.getElementById("statYear").textContent = valueOf("filterYear") || "-";
   document.getElementById("statMonth").textContent = valueOf("filterMonth") || "-";
-  document.getElementById("statFlag").textContent = valueOf("filterFlag") || "-";
+  document.getElementById("statFlag").textContent = state.view==="headline" ? "0" : (valueOf("filterFlag") || "-");
 }
 
 function viewTitle() {

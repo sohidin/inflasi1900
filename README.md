@@ -444,3 +444,34 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
   - angka memakai tabular numerals.
 - Dashboard/KPI/Insight ikut menggunakan hierarchy typography yang lebih konsisten.
 - Tidak ada perubahan backend atau logika data.
+
+
+## V10.30 — Inflasi Asem & Inflasi Final = Flag 0
+- KHUSUS menu `Inflasi Asem` dan `Inflasi Final`:
+  - filter Flag tidak ditampilkan;
+  - kartu Flag di ringkasan atas tidak ditampilkan;
+  - backend `getHeadline_()` wajib membaca `Flag = 0`.
+- Perbandingan Inflasi Asem vs Angka Final otomatis sama-sama memakai Flag 0.
+- Menu lain TIDAK diubah:
+  - Inflasi MtM/YtD/YoY
+  - Andil MtM/YtD/YoY
+  - Komoditas Andil
+  - seluruh filter Flag pada menu tersebut tetap berfungsi.
+- Dashboard tetap Flag 0.
+- Paket ini memulihkan `Code.gs` lengkap agar seluruh endpoint tabel tetap tersedia.
+- `Code.gs` berubah, jadi Apps Script harus deploy New version.
+
+
+## V10.31 — Performance Optimization
+- Menambahkan memory cache khusus response view/tabel.
+- Request identik yang berjalan bersamaan digabung (in-flight deduplication).
+- Cache view diperpanjang 15 menit.
+- Cache browser Dashboard/filter diperpanjang 12 jam.
+- Menu/table paling mungkin dipakai diprefetch setelah Dashboard selesai tampil.
+- Loading skeleton baru muncul setelah 260 ms, sehingga cache-hit tidak berkedip.
+- Jika view + filter sama persis dengan tampilan aktif, render ulang dihindari.
+- Filter backend memakai request-level memo.
+- Efek visual mahal (backdrop-filter/shadow besar) dikurangi tanpa mengubah desain utama.
+- Aturan khusus Inflasi Asem/Inflasi Final tetap Flag 0.
+- Menu lain dan filter Flag lain tidak diubah.
+- `Code.gs` berubah, jadi deploy Apps Script New version.
