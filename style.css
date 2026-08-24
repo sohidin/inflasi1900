@@ -1305,3 +1305,226 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   font-size:13px!important;
   font-weight:700!important;
 }
+
+
+/* ==========================================================================
+   V10.18 — STICKY TABLE HEADER + REGION HEADER REDESIGN
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. DATA TABLES STANDAR
+   Header tetap terlihat saat halaman di-scroll ke bawah.
+   DataTables scrollX membuat header berada di .dataTables_scrollHead,
+   sehingga elemen inilah yang dibuat sticky.
+   -------------------------------------------------------------------------- */
+#standardTableSection .dataTables_scroll{
+  position:relative!important;
+}
+
+#standardTableSection .dataTables_scrollHead{
+  position:sticky!important;
+  top:0!important;
+  z-index:60!important;
+  overflow:hidden!important;
+
+  background:#ffffff!important;
+  border-radius:13px 13px 0 0!important;
+  box-shadow:
+    0 2px 0 rgba(19,75,111,.10),
+    0 7px 18px rgba(23,72,103,.11)!important;
+}
+
+/* Hindari celah putih antara head dan body ketika sticky aktif. */
+#standardTableSection .dataTables_scrollHeadInner,
+#standardTableSection .dataTables_scrollHeadInner table{
+  width:100%!important;
+}
+
+/* --------------------------------------------------------------------------
+   2. REDESIGN HEADER TABEL STANDAR
+   Dua kolom identitas tetap lembut.
+   Kolom wilayah dibuat biru lebih tegas agar kode 1902/1903/dst menonjol.
+   -------------------------------------------------------------------------- */
+#standardTableSection table.dataTable thead th{
+  vertical-align:middle!important;
+  text-align:center!important;
+  border-bottom:1px solid #c7dbe8!important;
+  transition:none!important;
+}
+
+/* Kode Komoditas + Nama Komoditas */
+#standardTableSection table.dataTable thead th:nth-child(-n+2){
+  background:
+    linear-gradient(180deg,#edf6fc 0%,#e2eef7 100%)!important;
+  color:#244e69!important;
+  font-size:12px!important;
+  font-weight:850!important;
+  letter-spacing:-.01em!important;
+}
+
+/* Semua wilayah mulai kolom ke-3 */
+#standardTableSection table.dataTable thead th:nth-child(n+3){
+  background:
+    linear-gradient(180deg,#1178bd 0%,#0b5e9c 100%)!important;
+  color:#ffffff!important;
+  border-left:1px solid rgba(255,255,255,.18)!important;
+  border-bottom:1px solid #084d82!important;
+  padding-top:9px!important;
+  padding-bottom:9px!important;
+  text-shadow:0 1px 0 rgba(0,0,0,.08)!important;
+}
+
+/* Kode wilayah: 1902, 1903, 1906, 1971, 19 */
+#standardTableSection .city-head-code{
+  display:block!important;
+  text-align:center!important;
+
+  color:#ffffff!important;
+  font-size:15.5px!important;
+  font-weight:900!important;
+  line-height:1.05!important;
+  letter-spacing:.025em!important;
+  text-shadow:0 1px 2px rgba(0,31,54,.20)!important;
+}
+
+/* Nama wilayah di bawah kode */
+#standardTableSection .city-head-name{
+  display:block!important;
+  margin-top:5px!important;
+  padding:0 3px!important;
+
+  color:#dff3ff!important;
+  font-size:9.8px!important;
+  font-weight:800!important;
+  line-height:1.12!important;
+  letter-spacing:.015em!important;
+  white-space:normal!important;
+  text-align:center!important;
+}
+
+/* Sorting indicators lebih jelas di header biru. */
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting:before,
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting:after,
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting_asc:before,
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting_asc:after,
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting_desc:before,
+#standardTableSection table.dataTable thead th:nth-child(n+3).sorting_desc:after{
+  color:#ffffff!important;
+  opacity:.75!important;
+}
+
+/* --------------------------------------------------------------------------
+   3. INFLASI ASEM vs ANGKA FINAL — HEADER 2 TINGKAT
+   Header row pertama dan row metrik sama-sama sticky.
+   Tinggi row pertama dikunci agar offset row kedua selalu presisi.
+   -------------------------------------------------------------------------- */
+@media(min-width:1001px){
+  #standardTableSection .table-wrap{
+    overflow:visible!important;
+  }
+
+  .comparison-native-table thead .cmp-group-row th{
+    position:sticky!important;
+    top:0!important;
+    z-index:56!important;
+    height:58px!important;
+    min-height:58px!important;
+    box-shadow:0 1px 0 rgba(19,75,111,.08)!important;
+  }
+
+  .comparison-native-table thead .cmp-metric-row th{
+    position:sticky!important;
+    top:58px!important;
+    z-index:55!important;
+    height:37px!important;
+    box-shadow:0 5px 11px rgba(19,75,111,.08)!important;
+  }
+
+  /* Inflasi Final — header dua tingkat */
+  .final-native-table thead .final-group-row th{
+    position:sticky!important;
+    top:0!important;
+    z-index:56!important;
+    height:58px!important;
+    min-height:58px!important;
+    box-shadow:0 1px 0 rgba(19,75,111,.08)!important;
+  }
+
+  .final-native-table thead .final-metric-row th{
+    position:sticky!important;
+    top:58px!important;
+    z-index:55!important;
+    height:37px!important;
+    box-shadow:0 5px 11px rgba(19,75,111,.08)!important;
+  }
+}
+
+/* Header Angka Final/Asem dibuat sedikit lebih kuat. */
+.comparison-native-table .cmp-group strong,
+.final-native-table .final-group strong{
+  font-size:11.5px!important;
+  font-weight:900!important;
+  letter-spacing:.075em!important;
+}
+
+.comparison-native-table .cmp-metric-row th,
+.final-native-table .final-metric-row th{
+  font-size:11px!important;
+  font-weight:850!important;
+  color:#244e69!important;
+}
+
+/* --------------------------------------------------------------------------
+   4. KOMODITAS ANDIL
+   Jika mode threshold menghasilkan tabel panjang, judul kolom card tetap ada.
+   -------------------------------------------------------------------------- */
+.city-table-scroll{
+  position:relative!important;
+}
+
+.commodity-plain-table thead th{
+  position:sticky!important;
+  top:0!important;
+  z-index:8!important;
+  background:
+    linear-gradient(180deg,#eef6fb,#e4eff7)!important;
+  color:#2b526c!important;
+  font-weight:850!important;
+  box-shadow:0 1px 0 #d7e5ee!important;
+}
+
+/* --------------------------------------------------------------------------
+   5. EXPORT PDF / IMAGE
+   Sticky hanya untuk WEB. Pada clone export posisi dikembalikan normal agar
+   header tidak menumpuk/bergeser pada hasil PDF atau Image.
+   -------------------------------------------------------------------------- */
+.visual-export-clone .dataTables_scrollHead,
+#standardExportClone .dataTables_scrollHead,
+#comparisonExportClone thead th,
+#finalHeadlineExportClone thead th,
+#commodityExportClone thead th,
+.visual-export-clone thead th{
+  position:static!important;
+  top:auto!important;
+  z-index:auto!important;
+}
+
+/* Pada export tetap gunakan tampilan regional yang lebih eye-catching. */
+.visual-export-clone .city-head-code{
+  font-size:15.5px!important;
+  font-weight:900!important;
+}
+.visual-export-clone .city-head-name{
+  font-weight:800!important;
+}
+
+/* Mobile/tablet tetap memakai scroll horizontal normal. */
+@media(max-width:1000px){
+  #standardTableSection .table-wrap{
+    overflow:auto!important;
+  }
+
+  #standardTableSection .dataTables_scrollHead{
+    top:0!important;
+  }
+}

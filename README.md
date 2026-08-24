@@ -244,3 +244,18 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Tinggi 43px, padding 9px 10px, radius 11px.
 - Ikon, hover, active state, dan chevron kanan diseragamkan.
 - Tidak mengubah logika data, API, download, atau Apps Script.
+
+
+## V10.18 — Sticky Header & Header Wilayah
+- Header tabel standar sekarang tetap terlihat ketika halaman di-scroll ke bawah.
+- Berlaku pada menu Inflasi, Andil, MtM/YtD/YoY, dan tabel DataTables standar lain.
+- Header dua tingkat pada Inflasi Asem vs Angka Final dan Inflasi Final juga sticky.
+- Header tabel Komoditas Andil ikut sticky ketika isi tabel panjang.
+- Kode wilayah 1902 / 1903 / 1906 / 1971 / 19 dibuat:
+  - lebih besar,
+  - lebih tebal,
+  - warna putih,
+  - background gradient biru,
+  - nama kabupaten/kota lebih kontras.
+- Sticky dinonaktifkan khusus pada clone PDF/Image supaya hasil export tetap normal.
+- Tidak mengubah backend, API, login, data, filter, atau logika download.
