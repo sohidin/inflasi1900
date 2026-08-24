@@ -259,3 +259,26 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
   - nama kabupaten/kota lebih kontras.
 - Sticky dinonaktifkan khusus pada clone PDF/Image supaya hasil export tetap normal.
 - Tidak mengubah backend, API, login, data, filter, atau logika download.
+
+
+## V10.19 — Sticky Header Fix
+- V10.18 belum konsisten karena DataTables `scrollX` membuat header clone.
+- V10.19 memakai JavaScript untuk membuat `.dataTables_scrollHead` fixed saat user scroll melewati bagian atas tabel.
+- Header tetap terlihat sampai bagian bawah tabel.
+- Berfungsi kembali setelah sort, search, pagination, dan perubahan jumlah baris.
+- Header kode wilayah sekarang ditargetkan langsung pada clone yang benar-benar terlihat:
+  - 1902 / 1903 / 1906 / 1971 / 19 lebih besar dan lebih tebal.
+  - Background gradient biru.
+  - Teks putih.
+  - Nama kabupaten/kota biru muda-putih yang lebih kontras.
+- `index.html` menggunakan `style.css?v=10.19` dan `script.js?v=10.19` agar cache GitHub Pages/browser tidak memakai file lama.
+
+
+## V10.20 — Unified Table Header
+- Header `Kode Komoditas` dan `Nama Komoditas` sekarang sama dengan header wilayah.
+- Seluruh header memakai gradient biru yang sama.
+- Teks putih dan font weight 900.
+- Sorting icon putih.
+- Border dan alignment diseragamkan.
+- Sticky header V10.19 tetap dipertahankan.
+- Hasil visual export PDF/Image mengikuti header baru.

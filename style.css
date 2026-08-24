@@ -1528,3 +1528,211 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
     top:0!important;
   }
 }
+
+
+/* ==========================================================================
+   V10.19 — ROBUST DATATABLES STICKY HEADER
+   ========================================================================== */
+
+/*
+  IMPORTANT:
+  DataTables scrollX menampilkan HEADER CLONE di .dataTables_scrollHead.
+  Jadi styling difokuskan ke elemen yang benar-benar terlihat tersebut.
+*/
+
+/* Header clone container */
+#standardTableSection .dataTables_scrollHead{
+  background:#ffffff!important;
+  overflow:hidden!important;
+}
+
+/* State saat header dikunci JS ke viewport */
+#standardTableSection .dataTables_scrollHead.is-fixed-table-head{
+  border-radius:0 0 12px 12px!important;
+  box-shadow:
+    0 2px 0 rgba(8,76,124,.10),
+    0 8px 22px rgba(10,63,99,.20)!important;
+}
+
+/* Pastikan header clone mengisi seluruh lebar tabel */
+#standardTableSection .dataTables_scrollHeadInner,
+#standardTableSection .dataTables_scrollHeadInner > table{
+  min-width:100%!important;
+}
+
+/* Dua kolom identitas */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(1),
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(2){
+  background:
+    linear-gradient(180deg,#edf6fc 0%,#dfeef8 100%)!important;
+  color:#214b67!important;
+  border-bottom:2px solid #bad4e4!important;
+  font-size:12px!important;
+  font-weight:900!important;
+  vertical-align:middle!important;
+}
+
+/* Semua header kab/kota */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(n+3){
+  background:
+    linear-gradient(180deg,#1682c5 0%,#0863a5 100%)!important;
+  color:#ffffff!important;
+  border-left:1px solid rgba(255,255,255,.22)!important;
+  border-bottom:2px solid #07558e!important;
+  padding:9px 20px 9px 8px!important;
+  vertical-align:middle!important;
+  text-align:center!important;
+}
+
+/* 1902 / 1903 / 1906 / 1971 / 19 */
+#standardTableSection .dataTables_scrollHead .city-head-code{
+  display:block!important;
+  color:#ffffff!important;
+  font-size:16px!important;
+  font-weight:900!important;
+  line-height:1.02!important;
+  letter-spacing:.035em!important;
+  text-align:center!important;
+  text-shadow:0 1px 2px rgba(0,35,59,.25)!important;
+}
+
+/* Nama kab/kota */
+#standardTableSection .dataTables_scrollHead .city-head-name{
+  display:block!important;
+  margin-top:5px!important;
+  padding:0 2px!important;
+
+  color:#e1f4ff!important;
+  font-size:9.7px!important;
+  font-weight:850!important;
+  line-height:1.12!important;
+  letter-spacing:.01em!important;
+  text-align:center!important;
+  white-space:normal!important;
+}
+
+/* Sorting arrows */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(n+3)::before,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(n+3)::after{
+  color:#ffffff!important;
+  opacity:.78!important;
+}
+
+/* Avoid clipping a viewport-fixed header */
+#standardTableSection,
+#standardTableSection .dataTables_wrapper,
+#standardTableSection .dataTables_scroll{
+  overflow:visible!important;
+}
+
+/* Horizontal scrolling stays on the data body */
+#standardTableSection .dataTables_scrollBody{
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+}
+
+/* On export clones, floating position is disabled */
+.visual-export-clone .dataTables_scrollHead,
+#standardExportClone .dataTables_scrollHead{
+  position:static!important;
+  top:auto!important;
+  left:auto!important;
+  width:auto!important;
+  z-index:auto!important;
+  margin:0!important;
+  box-shadow:none!important;
+}
+
+/* Native comparison/final tables: sticky via CSS works because they are not
+   split into DataTables head/body clones. */
+@media(min-width:901px){
+  .comparison-native-table thead .cmp-group-row th,
+  .final-native-table thead .final-group-row th{
+    position:sticky!important;
+    top:0!important;
+    z-index:70!important;
+  }
+
+  .comparison-native-table thead .cmp-metric-row th,
+  .final-native-table thead .final-metric-row th{
+    position:sticky!important;
+    top:58px!important;
+    z-index:69!important;
+    box-shadow:0 5px 14px rgba(14,69,103,.10)!important;
+  }
+}
+
+/* Commodity tables */
+.commodity-plain-table thead th{
+  position:sticky!important;
+  top:0!important;
+  z-index:20!important;
+  background:linear-gradient(180deg,#edf6fc,#e1eef7)!important;
+  color:#244f69!important;
+  font-weight:900!important;
+}
+
+
+/* ==========================================================================
+   V10.20 — UNIFIED TABLE HEADER
+   Kode Komoditas + Nama Komoditas disamakan dengan header wilayah.
+   ========================================================================== */
+
+/* Seluruh header DataTables menggunakan satu visual language */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th{
+  background:linear-gradient(180deg,#1682c5 0%,#0863a5 100%)!important;
+  color:#ffffff!important;
+  border-left:1px solid rgba(255,255,255,.20)!important;
+  border-bottom:2px solid #07558e!important;
+  padding:10px 20px 9px 10px!important;
+  vertical-align:middle!important;
+  text-align:center!important;
+  font-weight:900!important;
+  text-shadow:0 1px 2px rgba(0,35,59,.20)!important;
+}
+
+/* Kode Komoditas dan Nama Komoditas */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(1),
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(2){
+  background:linear-gradient(180deg,#1682c5 0%,#0863a5 100%)!important;
+  color:#ffffff!important;
+  border-left:1px solid rgba(255,255,255,.20)!important;
+  border-bottom:2px solid #07558e!important;
+  font-size:12.5px!important;
+  font-weight:900!important;
+  letter-spacing:.01em!important;
+  text-align:center!important;
+  text-shadow:0 1px 2px rgba(0,35,59,.20)!important;
+}
+
+/* Pastikan sorting arrows dua kolom pertama juga putih */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(1)::before,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(1)::after,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(2)::before,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(2)::after{
+  color:#ffffff!important;
+  opacity:.78!important;
+}
+
+/* Sedikit pembeda batas antara kolom identitas dan wilayah tanpa beda warna */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:nth-child(2){
+  border-right:2px solid rgba(255,255,255,.28)!important;
+}
+
+/* Hover/sort state jangan mengubah warna header */
+#standardTableSection .dataTables_scrollHead table.dataTable thead th:hover,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th.sorting_asc,
+#standardTableSection .dataTables_scrollHead table.dataTable thead th.sorting_desc{
+  background:linear-gradient(180deg,#1682c5 0%,#0863a5 100%)!important;
+  color:#ffffff!important;
+}
+
+/* Export visual mengikuti header baru */
+.visual-export-clone table.dataTable thead th,
+#standardExportClone table.dataTable thead th{
+  background:linear-gradient(180deg,#1682c5 0%,#0863a5 100%)!important;
+  color:#ffffff!important;
+  border-bottom:2px solid #07558e!important;
+  font-weight:900!important;
+  text-align:center!important;
+}

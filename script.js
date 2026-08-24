@@ -26,6 +26,8 @@ const state = {
   // [OPT-1] Prefetch queue — menyimpan permintaan filter/data yang sedang berjalan
   // agar tidak ada 2 fetch identik sekaligus.
   _inflightKeys: new Map(),
+  _stickyHeaderBound: false,
+  _stickyHeaderRaf: 0,
 };
 
 // ===========================================================================
@@ -654,7 +656,101 @@ function viewTitle() {
 // ===========================================================================
 // CLEANUP STANDARD TABLE
 // ===========================================================================
+
+function refreshRobustStickyHeader() {
+  state._stickyHeaderRaf = 0;
+
+  const wrapper = document.querySelector("#standardTableSection #mainTable_wrapper");
+  if (!wrapper) return;
+
+  const scrollHead = wrapper.querySelector(".dataTables_scrollHead");
+  const scrollBody = wrapper.querySelector(".dataTables_scrollBody");
+  if (!scrollHead || !scrollBody) return;
+
+  const headHeight = Math.ceil(scrollHead.getBoundingClientRect().height || scrollHead.offsetHeight || 0);
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const bodyRect = scrollBody.getBoundingClientRect();
+
+  // Header fixed only while user is inside this table.
+  const shouldFix =
+    wrapperRect.top <= 0 &&
+    bodyRect.bottom > headHeight + 4;
+
+  if (shouldFix) {
+    const currentBodyRect = scrollBody.getBoundingClientRect();
+
+    scrollHead.classList.add("is-fixed-table-head");
+    scrollHead.style.position = "fixed";
+    scrollHead.style.top = "0px";
+    scrollHead.style.left = currentBodyRect.left + "px";
+    scrollHead.style.width = currentBodyRect.width + "px";
+    scrollHead.style.zIndex = "999";
+    scrollHead.style.margin = "0";
+
+    // Prevent layout jump when the header leaves normal document flow.
+    scrollBody.style.marginTop = headHeight + "px";
+  } else {
+    scrollHead.classList.remove("is-fixed-table-head");
+    scrollHead.style.position = "";
+    scrollHead.style.top = "";
+    scrollHead.style.left = "";
+    scrollHead.style.width = "";
+    scrollHead.style.zIndex = "";
+    scrollHead.style.margin = "";
+    scrollBody.style.marginTop = "";
+  }
+}
+
+function scheduleRobustStickyHeader() {
+  if (state._stickyHeaderRaf) return;
+  state._stickyHeaderRaf = requestAnimationFrame(refreshRobustStickyHeader);
+}
+
+function setupRobustStickyHeader() {
+  const wrapper = document.querySelector("#standardTableSection #mainTable_wrapper");
+  if (!wrapper) return;
+
+  wrapper.classList.add("sticky-enabled-table");
+
+  // Bind to window only once. The handler always looks up the CURRENT table,
+  // so it remains valid after menu changes / DataTables rebuilds.
+  if (!state._stickyHeaderBound) {
+    window.addEventListener("scroll", scheduleRobustStickyHeader, { passive: true });
+    window.addEventListener("resize", scheduleRobustStickyHeader, { passive: true });
+    state._stickyHeaderBound = true;
+  }
+
+  const scrollBody = wrapper.querySelector(".dataTables_scrollBody");
+  if (scrollBody) {
+    // DataTables already synchronises horizontal scroll; this call just
+    // repositions the fixed container if its geometry changes.
+    scrollBody.addEventListener("scroll", scheduleRobustStickyHeader, { passive: true });
+  }
+
+  requestAnimationFrame(refreshRobustStickyHeader);
+}
+
+function teardownRobustStickyHeader() {
+  const wrapper = document.querySelector("#standardTableSection #mainTable_wrapper");
+  if (!wrapper) return;
+
+  const head = wrapper.querySelector(".dataTables_scrollHead");
+  const body = wrapper.querySelector(".dataTables_scrollBody");
+
+  if (head) {
+    head.classList.remove("is-fixed-table-head");
+    head.style.position = "";
+    head.style.top = "";
+    head.style.left = "";
+    head.style.width = "";
+    head.style.zIndex = "";
+    head.style.margin = "";
+  }
+  if (body) body.style.marginTop = "";
+}
+
 function cleanupStandardTableUi() {
+  teardownRobustStickyHeader();
   const comparisonToolbar = document.getElementById("comparisonToolbar");
   if (comparisonToolbar) {
     comparisonToolbar.classList.add("hidden");
@@ -1203,6 +1299,16 @@ function renderStandard(r) {
   state.mainDt.on("length.dt", (_e, _settings, len) => {
     state.pageLength = Number(len);
     localStorage.setItem("inflasi_page_length", String(len));
+  });
+
+  // Re-attach after paging, sorting, filtering, or changing row count.
+  state.mainDt.on("draw.dt", () => {
+    requestAnimationFrame(setupRobustStickyHeader);
+  });
+
+  // DataTables needs two paints before scrollHead width is stable.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(setupRobustStickyHeader);
   });
 }
 
