@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.27">
+  <link rel="stylesheet" href="style.css?v=10.28">
 </head>
 <body>
   <!-- LOGIN -->
@@ -249,31 +249,54 @@
             </div>
           </article>
 
-          <aside class="dashboard-insight-card">
-            <div>
+          <aside class="dashboard-insight-card dashboard-insight-six">
+            <div class="insight-title-block">
               <span class="eyebrow">SOROTAN SERIES</span>
               <h3>Insight Tahun Terpilih</h3>
+              <p>Nilai ekstrem berdasarkan wilayah utama dan tahun yang dipilih.</p>
             </div>
 
-            <div class="insight-row">
-              <span>MtM Tertinggi</span>
-              <strong id="dashMaxMtm">-</strong>
-              <small id="dashMaxMtmMonth">-</small>
-            </div>
-            <div class="insight-row">
-              <span>MtM Terendah</span>
-              <strong id="dashMinMtm">-</strong>
-              <small id="dashMinMtmMonth">-</small>
-            </div>
-            <div class="insight-row">
-              <span>YoY Terbaru</span>
-              <strong id="dashInsightYoy">-</strong>
-              <small id="dashInsightYoyPeriod">-</small>
+            <div class="insight-grid-six">
+              <div class="insight-row insight-high">
+                <span>MtM Tertinggi</span>
+                <strong id="dashMaxMtm">-</strong>
+                <small id="dashMaxMtmMonth">-</small>
+              </div>
+
+              <div class="insight-row insight-low">
+                <span>MtM Terendah</span>
+                <strong id="dashMinMtm">-</strong>
+                <small id="dashMinMtmMonth">-</small>
+              </div>
+
+              <div class="insight-row insight-high">
+                <span>YtD Tertinggi</span>
+                <strong id="dashMaxYtd">-</strong>
+                <small id="dashMaxYtdMonth">-</small>
+              </div>
+
+              <div class="insight-row insight-low">
+                <span>YtD Terendah</span>
+                <strong id="dashMinYtd">-</strong>
+                <small id="dashMinYtdMonth">-</small>
+              </div>
+
+              <div class="insight-row insight-high">
+                <span>YoY Tertinggi</span>
+                <strong id="dashMaxYoy">-</strong>
+                <small id="dashMaxYoyMonth">-</small>
+              </div>
+
+              <div class="insight-row insight-low">
+                <span>YoY Terendah</span>
+                <strong id="dashMinYoy">-</strong>
+                <small id="dashMinYoyMonth">-</small>
+              </div>
             </div>
 
             <div class="dashboard-note">
               <span>ℹ</span>
-              <p>Series menggunakan <b>Angka Final</b> untuk wilayah dan tahun yang dipilih. Grafik hanya memuat bulan yang tersedia pada spreadsheet.</p>
+              <p>Series menggunakan <b>Angka Final • Flag 0</b> untuk wilayah utama dan tahun yang dipilih.</p>
             </div>
           </aside>
         </div>
@@ -505,6 +528,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.27"></script>
+  <script src="script.js?v=10.28"></script>
 </body>
 </html>

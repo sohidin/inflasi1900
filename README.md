@@ -408,3 +408,18 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Cache browser dan optimasi navigasi V10.26 tetap dipertahankan.
 - Error Dashboard sekarang menampilkan pesan backend yang lebih jelas.
 - `Code.gs` wajib deploy ulang sebagai **New version**.
+
+
+## V10.28 — Six Insight Cards
+- Panel `Insight Tahun Terpilih` sekarang menampilkan 6 indikator:
+  - MtM Tertinggi
+  - MtM Terendah
+  - YtD Tertinggi
+  - YtD Terendah
+  - YoY Tertinggi
+  - YoY Terendah
+- Masing-masing menampilkan nilai dan bulan/tahun.
+- Layout dibuat 2 kolom × 3 baris agar lebih ringkas.
+- Nilai tertinggi diberi aksen merah, nilai terendah diberi aksen hijau.
+- Tetap berdasarkan Angka Final Flag 0, wilayah utama, dan tahun terpilih.
+- Tidak ada perubahan backend/API.

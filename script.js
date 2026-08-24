@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbyP617-eHb2PNSCFMLVU5fA9C2vaAvSNXo3DTLMAPbQdJ6HjdiRfQbYaiek4-228xcl/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
 };
 
 // ===========================================================================
@@ -870,6 +870,9 @@ function renderDashboard(r) {
     Number.isFinite(delta) ? dashboardSigned(delta) : "-";
 
   const ms = r.mtmSummary || {};
+  const ys = r.ytdSummary || {};
+  const yos = r.yoySummary || {};
+
   document.getElementById("dashMaxMtm").textContent = dashboardNumber(ms.max);
   document.getElementById("dashMaxMtmMonth").textContent =
     ms.maxMonth ? monthLabel(ms.maxMonth,r.year) : "-";
@@ -877,9 +880,19 @@ function renderDashboard(r) {
   document.getElementById("dashMinMtmMonth").textContent =
     ms.minMonth ? monthLabel(ms.minMonth,r.year) : "-";
 
-  document.getElementById("dashInsightYoy").textContent = dashboardNumber(latest.yoy);
-  document.getElementById("dashInsightYoyPeriod").textContent =
-    hasLatest ? monthLabel(latest.month,r.year) : "-";
+  document.getElementById("dashMaxYtd").textContent = dashboardNumber(ys.max);
+  document.getElementById("dashMaxYtdMonth").textContent =
+    ys.maxMonth ? monthLabel(ys.maxMonth,r.year) : "-";
+  document.getElementById("dashMinYtd").textContent = dashboardNumber(ys.min);
+  document.getElementById("dashMinYtdMonth").textContent =
+    ys.minMonth ? monthLabel(ys.minMonth,r.year) : "-";
+
+  document.getElementById("dashMaxYoy").textContent = dashboardNumber(yos.max);
+  document.getElementById("dashMaxYoyMonth").textContent =
+    yos.maxMonth ? monthLabel(yos.maxMonth,r.year) : "-";
+  document.getElementById("dashMinYoy").textContent = dashboardNumber(yos.min);
+  document.getElementById("dashMinYoyMonth").textContent =
+    yos.minMonth ? monthLabel(yos.minMonth,r.year) : "-";
 
   document.getElementById("dashboardChartSubtitle").textContent =
     `${r.cityCode} • ${r.cityName} • Tahun ${r.year}`;

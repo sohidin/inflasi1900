@@ -2575,3 +2575,106 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
     transition:opacity .10s linear!important;
   }
 }
+
+
+/* ==========================================================================
+   V10.28 — SIX INSIGHT CARDS
+   ========================================================================== */
+
+.dashboard-insight-six{
+  gap:12px!important;
+}
+
+.insight-title-block p{
+  margin:5px 0 0;
+  color:#7b90a2;
+  font-size:9.5px;
+  line-height:1.4;
+  font-weight:650;
+}
+
+.insight-grid-six{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+
+.dashboard-insight-six .insight-row{
+  min-height:92px;
+  padding:12px 13px;
+  border-radius:14px;
+  background:#f7fafc;
+  border:1px solid #e0ebf2;
+  position:relative;
+  overflow:hidden;
+}
+
+.dashboard-insight-six .insight-row::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:3px;
+}
+
+.dashboard-insight-six .insight-high::before{
+  background:#ef7267;
+}
+
+.dashboard-insight-six .insight-low::before{
+  background:#1eb88c;
+}
+
+.dashboard-insight-six .insight-row span{
+  display:block;
+  color:#71879a;
+  font-size:9px;
+  font-weight:750;
+}
+
+.dashboard-insight-six .insight-row strong{
+  display:block;
+  margin-top:5px;
+  color:#102a43;
+  font-size:18px;
+  font-weight:900;
+  line-height:1.05;
+  letter-spacing:-.025em;
+}
+
+.dashboard-insight-six .insight-row small{
+  display:block;
+  margin-top:5px;
+  color:#8296a7;
+  font-size:8.8px;
+  font-weight:650;
+}
+
+.dashboard-insight-six .insight-high strong{
+  color:#c94d43;
+}
+
+.dashboard-insight-six .insight-low strong{
+  color:#087d61;
+}
+
+@media(max-width:1250px){
+  .dashboard-insight-six{
+    display:block!important;
+  }
+
+  .dashboard-insight-six .insight-grid-six{
+    margin-top:12px;
+  }
+
+  .dashboard-insight-six .dashboard-note{
+    margin-top:12px;
+  }
+}
+
+@media(max-width:560px){
+  .insight-grid-six{
+    grid-template-columns:1fr;
+  }
+}
