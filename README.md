@@ -423,3 +423,24 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Nilai tertinggi diberi aksen merah, nilai terendah diberi aksen hijau.
 - Tetap berdasarkan Angka Final Flag 0, wilayah utama, dan tahun terpilih.
 - Tidak ada perubahan backend/API.
+
+
+## V10.29 — Typography Refresh
+- Tipografi seluruh website diganti ke system UI font stack:
+  - Segoe UI Variable / Segoe UI
+  - system-ui
+  - fallback Roboto / Helvetica / Arial
+- Tidak menggunakan Google Fonts/external font request agar loading tidak bertambah.
+- Sidebar:
+  - menu utama lebih tegas,
+  - MtM/YtD/YoY medium-bold,
+  - submenu lebih ringan dan clean,
+  - line-height diperbesar,
+  - teks panjang lebih nyaman dibaca.
+- Inflasi Asem/Final tetap seragam dengan MtM/YtD/YoY.
+- Tabel:
+  - isi tabel lebih ringan,
+  - header tetap tegas,
+  - angka memakai tabular numerals.
+- Dashboard/KPI/Insight ikut menggunakan hierarchy typography yang lebih konsisten.
+- Tidak ada perubahan backend atau logika data.
