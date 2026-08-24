@@ -1736,3 +1736,83 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   font-weight:900!important;
   text-align:center!important;
 }
+
+
+/* ==========================================================================
+   V10.21 — REMOVE DUPLICATE HEADER STRIP INSIDE DATATABLES BODY
+   ========================================================================== */
+
+/*
+  DataTables + scrollX menyimpan THEAD asli di tabel yang berada di
+  .dataTables_scrollBody untuk perhitungan lebar kolom.
+  Header yang terlihat oleh user adalah clone di .dataTables_scrollHead.
+
+  Jangan pakai display:none karena dapat merusak sinkronisasi lebar.
+  Kita pertahankan elemen untuk sizing, tetapi seluruh visual/tingginya = 0.
+*/
+#standardTableSection .dataTables_scrollBody table.dataTable > thead{
+  visibility:hidden!important;
+  height:0!important;
+  max-height:0!important;
+  overflow:hidden!important;
+}
+
+#standardTableSection .dataTables_scrollBody table.dataTable > thead > tr{
+  height:0!important;
+  max-height:0!important;
+  line-height:0!important;
+  border:0!important;
+}
+
+#standardTableSection .dataTables_scrollBody table.dataTable > thead > tr > th,
+#standardTableSection .dataTables_scrollBody table.dataTable > thead > tr > td{
+  height:0!important;
+  min-height:0!important;
+  max-height:0!important;
+
+  padding-top:0!important;
+  padding-bottom:0!important;
+
+  border-top:0!important;
+  border-bottom:0!important;
+
+  background:transparent!important;
+  background-color:transparent!important;
+  background-image:none!important;
+
+  box-shadow:none!important;
+  text-shadow:none!important;
+
+  line-height:0!important;
+  font-size:0!important;
+
+  color:transparent!important;
+}
+
+/* Sembunyikan isi wrapper judul, tetapi jangan ubah width kolom. */
+#standardTableSection .dataTables_scrollBody table.dataTable > thead .city-head-code,
+#standardTableSection .dataTables_scrollBody table.dataTable > thead .city-head-name{
+  height:0!important;
+  min-height:0!important;
+  max-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  line-height:0!important;
+  font-size:0!important;
+  color:transparent!important;
+}
+
+/* Sorting arrows pada thead sizing juga jangan sampai membuat tinggi. */
+#standardTableSection .dataTables_scrollBody table.dataTable > thead th::before,
+#standardTableSection .dataTables_scrollBody table.dataTable > thead th::after{
+  display:none!important;
+  content:none!important;
+}
+
+/*
+  Header clone di scrollHead tetap memakai desain V10.20 sepenuhnya.
+*/
+#standardTableSection .dataTables_scrollHead table.dataTable > thead{
+  visibility:visible!important;
+  height:auto!important;
+}

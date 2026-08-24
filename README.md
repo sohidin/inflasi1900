@@ -282,3 +282,12 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Border dan alignment diseragamkan.
 - Sticky header V10.19 tetap dipertahankan.
 - Hasil visual export PDF/Image mengikuti header baru.
+
+
+## V10.21 — Clean Header
+- Menghilangkan strip/baris warna tambahan tepat di bawah header tabel.
+- Strip tersebut berasal dari `thead` asli di `.dataTables_scrollBody` milik DataTables `scrollX`.
+- Header asli tidak dihapus (`display:none` tidak digunakan) agar sinkronisasi lebar kolom tetap aman.
+- Visual header body dibuat tinggi 0, tanpa padding, border, background, teks, dan sorting icon.
+- Header clone di `.dataTables_scrollHead` tetap memakai desain biru V10.20 dan sticky header V10.19.
+- `style.css?v=10.21` dan `script.js?v=10.21` digunakan untuk menghindari cache frontend lama.
