@@ -230,3 +230,10 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Setiap sheet memuat metadata sumber, menu, tahun, bulan, flag, tanggal dan jam download.
 - Backend memakai **request-local period memo** sehingga blok data tahun-bulan yang sama hanya dibaca sekali selama proses bulk export.
 - Bulk export menggunakan satu request API per workbook, bukan 10 request browser terpisah.
+
+
+## V10.15 — Highlight export sama dengan web
+- Memperbaiki artefak kotak/strip pada highlight merah dan hijau di PDF/Image.
+- Clone export memakai warna solid, border tipis, radius dan ukuran pill yang sama seperti web.
+- Inset box-shadow dihilangkan hanya saat export karena dapat dirender tidak konsisten oleh html2canvas.
+- Tampilan web tidak diubah.

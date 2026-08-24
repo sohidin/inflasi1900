@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbyNCBvJk7j73-opXd0IKKU5C-n1gTOnjSiDnVbWtMx81wiXPU0w-aNDgC4Swm9vhuM/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
 };
 
 // ===========================================================================
@@ -1019,6 +1019,61 @@ function downloadComparisonExcel() {
   XLSX.writeFile(wb, safeName(`Inflasi Asem vs Angka Final-${meta.fileStamp}`) + ".xlsx");
 }
 
+
+function normalizeExportHighlights(root) {
+  if (!root) return;
+
+  root.querySelectorAll(".metric-value.metric-high").forEach(el => {
+    Object.assign(el.style, {
+      display: "inline-flex",
+      minWidth: "58px",
+      minHeight: "28px",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "5px 9px",
+      borderRadius: "9px",
+      background: "#fff0ef",
+      color: "#d33a2f",
+      border: "1px solid #ffd0cb",
+      boxShadow: "none",
+      backgroundImage: "none",
+      filter: "none",
+      opacity: "1"
+    });
+  });
+
+  root.querySelectorAll(".metric-value.metric-low").forEach(el => {
+    Object.assign(el.style, {
+      display: "inline-flex",
+      minWidth: "58px",
+      minHeight: "28px",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "5px 9px",
+      borderRadius: "9px",
+      background: "#e9f8f1",
+      color: "#07814e",
+      border: "1px solid #c8eadb",
+      boxShadow: "none",
+      backgroundImage: "none",
+      filter: "none",
+      opacity: "1"
+    });
+  });
+
+  root.querySelectorAll("td.cell-high").forEach(td => {
+    td.style.background = "#fff0ef";
+    td.style.backgroundImage = "none";
+    td.style.boxShadow = "none";
+  });
+
+  root.querySelectorAll("td.cell-low").forEach(td => {
+    td.style.background = "#e9f8f1";
+    td.style.backgroundImage = "none";
+    td.style.boxShadow = "none";
+  });
+}
+
 async function comparisonExportCanvas() {
   const section = document.getElementById("standardTableSection");
   const clone = section.cloneNode(true);
@@ -1339,6 +1394,7 @@ function buildStandardExportClone() {
     </div>`;
   clone.insertBefore(report, clone.firstChild);
 
+  normalizeExportHighlights(clone);
   document.body.appendChild(clone);
   return { clone, meta };
 }
@@ -1441,6 +1497,7 @@ function buildCommodityExportClone() {
     );
   });
 
+  normalizeExportHighlights(clone);
   document.body.appendChild(clone);
   return { clone, meta };
 }

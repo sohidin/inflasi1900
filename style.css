@@ -1187,3 +1187,45 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
 .bulk-download-btn.is-loading{
   background:rgba(14,84,116,.68)!important;
 }
+
+
+/* ===== V10.15: highlight PDF/Image sama dengan web ===== */
+/* Hanya clone export: hilangkan efek yang menghasilkan artefak html2canvas. */
+.visual-export-clone .metric-value.metric-high,
+#comparisonExportClone .metric-value.metric-high,
+#finalHeadlineExportClone .metric-value.metric-high,
+#standardExportClone .metric-value.metric-high,
+#commodityExportClone .metric-value.metric-high{
+  background:#fff0ef!important;
+  background-image:none!important;
+  color:#d33a2f!important;
+  border:1px solid #ffd0cb!important;
+  box-shadow:none!important;
+  filter:none!important;
+  opacity:1!important;
+}
+
+.visual-export-clone .metric-value.metric-low,
+#comparisonExportClone .metric-value.metric-low,
+#finalHeadlineExportClone .metric-value.metric-low,
+#standardExportClone .metric-value.metric-low,
+#commodityExportClone .metric-value.metric-low{
+  background:#e9f8f1!important;
+  background-image:none!important;
+  color:#07814e!important;
+  border:1px solid #c8eadb!important;
+  box-shadow:none!important;
+  filter:none!important;
+  opacity:1!important;
+}
+
+.visual-export-clone td.cell-high{
+  background:#fff0ef!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
+.visual-export-clone td.cell-low{
+  background:#e9f8f1!important;
+  background-image:none!important;
+  box-shadow:none!important;
+}
