@@ -3089,3 +3089,9 @@ table,
 .sidebar button{
   transition:background-color .12s ease,color .12s ease,border-color .12s ease!important;
 }
+
+
+/* V10.33 stable recovery status */
+.dashboard-fast-status.is-loading{
+  min-width:88px;
+}

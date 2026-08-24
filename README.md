@@ -475,3 +475,34 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Aturan khusus Inflasi Asem/Inflasi Final tetap Flag 0.
 - Menu lain dan filter Flag lain tidak diubah.
 - `Code.gs` berubah, jadi deploy Apps Script New version.
+
+
+## V10.32 — Dashboard Load Hotfix
+- Memperbaiki kondisi `Gagal memuat` yang dapat terjadi saat Apps Script
+  membaca terlalu banyak data untuk Dashboard.
+- Reader Dashboard sekarang hanya membaca B:L (11 kolom), bukan A:O.
+- Tetap strict `Flag = 0`.
+- Segment tahun digabung supaya biasanya hanya 1 `getRange()` per tahun.
+- Filter request-memo diperbaiki/dirapikan.
+- Prefetch menu ditunda 650 ms setelah Dashboard tampil supaya tidak berebut
+  resource dengan request pertama.
+- Jika refresh backend gagal tetapi cache browser tersedia, Dashboard cache
+  tetap ditampilkan.
+- Menambahkan action `dashboardPing` untuk diagnosis deployment.
+- Optimasi cache/menu V10.31 lainnya dipertahankan.
+- `Code.gs` berubah dan wajib deploy New version.
+
+
+## V10.33 — Stable Dashboard
+- Dashboard backend custom reader diganti dengan builder yang menggunakan
+  `getFilters_()` + `getHeadline_()` yang sama dengan menu normal.
+- `getHeadline_()` tetap strict Flag 0.
+- Payload Dashboard tetap dicache sebagai satu objek per tahun.
+- Frontend memiliki **automatic fallback**:
+  - bila `dashboardBootstrap` gagal,
+  - aplikasi otomatis memakai endpoint `filters(final)` + `headline(final)`
+    yang dipakai menu Inflasi Final.
+- Fallback request bulan dijalankan paralel dan memakai cache view.
+- Dashboard tidak lagi berhenti hanya karena endpoint Dashboard custom gagal.
+- Pemilihan wilayah tetap client-side.
+- `Code.gs` berubah dan harus deploy New version.

@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzg4v77Qj_rxaZBaqFLzUNc69l8-gSEx2CwwYmUCOiPeEBpt5j_rlA6E7Z6-ZUaFDZK/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbySI-_JRUMMAC_GlAINv71T982DqzGivKyzFrh8UA_MZqc4ofUyLsZmYHLq_jDWByR8/exec"
 };
 
 // ===========================================================================
@@ -113,7 +113,7 @@ async function cachedApi(prefix, params, ttlMs = 120000) {
 // ===========================================================================
 // PERSISTENT FRONTEND CACHE (stale-while-revalidate)
 // ===========================================================================
-const LOCAL_CACHE_VERSION="10.31";
+const LOCAL_CACHE_VERSION="10.33";
 const LOCAL_TTL={
   dashboard:12*60*60*1000,
   filters:12*60*60*1000
@@ -655,6 +655,107 @@ function makeDashboardData(data){
   };
 }
 
+
+async function buildDashboardFallback(yearWanted=""){
+  // Fallback intentionally uses the SAME endpoints as normal working menus.
+  const filters = await cachedApi(
+    "filters",
+    {action:"filters",source:"final"},
+    20*60*1000
+  );
+
+  const years=(filters.years||[]).slice();
+  const year=String(
+    (yearWanted && years.includes(String(yearWanted)))
+      ? yearWanted
+      : (years[0]||"")
+  );
+
+  if(!year) throw new Error("Tahun Angka Final tidak tersedia.");
+
+  const months=((filters.monthsByYear||{})[year]||[])
+    .slice()
+    .sort((a,b)=>Number(a)-Number(b));
+
+  if(!months.length) throw new Error(`Bulan tahun ${year} tidak tersedia.`);
+
+  // Request headline months in parallel. These are tiny 5-row responses and
+  // usually already cached by Apps Script / normal Inflasi Final menu.
+  const headlines=await Promise.all(
+    months.map(month=>
+      cachedViewRequest(
+        "headline",
+        {
+          action:"headline",
+          source:"final",
+          year,
+          month:String(month),
+          flag:"0"
+        },
+        15*60*1000
+      )
+    )
+  );
+
+  const normCode=v=>{
+    const x=String(v??"").trim();
+    return (x==="19"||x==="1900")?"1900":x;
+  };
+
+  const cityMap={};
+  (filters.cities||[]).forEach(c=>{
+    const code=normCode(c.code);
+    if(code) cityMap[code]=c.name||code;
+  });
+
+  const monthRows={};
+
+  headlines.forEach((h,i)=>{
+    const month=String(months[i]);
+    monthRows[month]={};
+
+    (h.rows||[]).forEach(row=>{
+      const code=normCode(row[0]);
+      if(!code) return;
+
+      if(!cityMap[code]) cityMap[code]=row[1]||code;
+
+      monthRows[month][code]={
+        month,
+        mtm:row[2],
+        ytd:row[3],
+        yoy:row[4]
+      };
+    });
+  });
+
+  const preferred=["1900","1902","1903","1906","1971"];
+  const codes=preferred.filter(code=>cityMap[code]);
+
+  Object.keys(cityMap)
+    .filter(code=>!preferred.includes(code))
+    .sort((a,b)=>Number(a)-Number(b))
+    .forEach(code=>codes.push(code));
+
+  const cities=codes.map(code=>({code,name:cityMap[code]}));
+
+  const comparisonSeries=cities.map(city=>({
+    code:city.code,
+    name:city.name,
+    series:months
+      .map(m=>monthRows[String(m)]?.[city.code])
+      .filter(Boolean)
+  }));
+
+  return {
+    year,
+    years,
+    cities,
+    months:months.map(String),
+    comparisonSeries
+  };
+}
+
 async function loadDashboard(){
   state.view="dashboard";state.source="final";
   setDashboardLayout(true);clearError();
@@ -704,14 +805,43 @@ async function loadDashboard(){
     }
 
     setDashboardFastStatus("Siap");
-    startBackgroundPrefetch();
+    setTimeout(startBackgroundPrefetch,650);
   }catch(err){
-    if(!persisted){
-      setDashboardFastStatus("Gagal memuat");
-      showError("Dashboard: " + (err.message||String(err)));
-    }else{
+    console.error("Dashboard bootstrap error:",err);
+
+    if(persisted){
       setDashboardFastStatus("Cache aktif");
-      startBackgroundPrefetch();
+      setTimeout(startBackgroundPrefetch,650);
+      return;
+    }
+
+    // Automatic recovery: use the normal Final filters/headline endpoints.
+    try{
+      setDashboardFastStatus("Mode aman…",true);
+
+      const f=await buildDashboardFallback();
+      const data={
+        year:f.year,
+        years:f.years||[],
+        cities:f.cities||[],
+        months:f.months||[],
+        comparisonSeries:f.comparisonSeries||[]
+      };
+
+      state.dashboardYearCache.set(String(data.year),data);
+      localCacheSet("dashboard_bootstrap",data);
+      hydrateDashboardControls(data,data.years||[]);
+      renderDashboardFromYearData();
+
+      setDashboardFastStatus("Siap");
+      setTimeout(startBackgroundPrefetch,650);
+    }catch(fallbackErr){
+      console.error("Dashboard fallback error:",fallbackErr);
+      setDashboardFastStatus("Gagal memuat");
+      showError(
+        "Dashboard gagal dimuat. " +
+        String(fallbackErr?.message || fallbackErr || err?.message || err)
+      );
     }
   }
 }
@@ -756,11 +886,35 @@ async function loadDashboardYear(year){
     }
     setDashboardFastStatus("Siap");
   }catch(err){
-    if(!persisted){
-      setDashboardFastStatus("Gagal memuat");
-      showError("Dashboard: " + (err.message||String(err)));
-    }else{
+    if(persisted){
       setDashboardFastStatus("Cache aktif");
+      return;
+    }
+
+    try{
+      setDashboardFastStatus("Mode aman…",true);
+      const f=await buildDashboardFallback(year);
+      const data={
+        year:f.year,
+        years:f.years||[],
+        cities:f.cities||[],
+        months:f.months||[],
+        comparisonSeries:f.comparisonSeries||[]
+      };
+
+      state.dashboardYearCache.set(year,data);
+      localCacheSet(`dashboard_year_${year}`,data);
+
+      if(valueOf("dashboardYear")===year){
+        hydrateDashboardControls(data,data.years||[]);
+        renderDashboardFromYearData();
+      }
+
+      setDashboardFastStatus("Siap");
+    }catch(fallbackErr){
+      console.error("Dashboard year fallback error:",fallbackErr);
+      setDashboardFastStatus("Gagal memuat");
+      showError("Dashboard: " + String(fallbackErr?.message||fallbackErr));
     }
   }
 }
