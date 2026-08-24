@@ -1229,3 +1229,79 @@ body .headline-comparison #mainTable.dataTable tbody td:nth-child(n+3){
   background-image:none!important;
   box-shadow:none!important;
 }
+
+/* ===== V10.17: Inflasi Asem & Inflasi Final = MtM / YtD / YoY ===== */
+.submenu > .leaf-main.leaf-main-equal{
+  width:100%!important;
+  min-height:43px!important;
+  padding:9px 10px!important;
+  margin:2px 0!important;
+  border:0!important;
+  border-radius:11px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  background:transparent!important;
+  color:#c9dfed!important;
+  font-family:"Plus Jakarta Sans",Arial,sans-serif!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  letter-spacing:0!important;
+  text-align:left!important;
+  cursor:pointer!important;
+  transition:.18s ease!important;
+  transform:none!important;
+}
+.submenu > .leaf-main.leaf-main-equal .sub-label{
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  font-family:"Plus Jakarta Sans",Arial,sans-serif!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  line-height:1.2!important;
+  color:inherit!important;
+}
+.submenu > .leaf-main.leaf-main-equal .sub-icon{
+  width:22px!important;
+  min-width:22px!important;
+  margin-right:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  color:#7dcfff!important;
+  font-size:13px!important;
+  font-weight:700!important;
+}
+.submenu > .leaf-main.leaf-main-equal .leaf-main-chevron{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  color:#fff!important;
+  font-size:16px!important;
+  font-weight:800!important;
+  line-height:1!important;
+  margin-left:auto!important;
+}
+.submenu > .leaf-main.leaf-main-equal:hover{
+  background:rgba(255,255,255,.065)!important;
+  color:#fff!important;
+  transform:none!important;
+}
+.submenu > .leaf-main.leaf-main-equal.active{
+  min-height:43px!important;
+  padding:9px 10px!important;
+  margin:2px 0!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  background:linear-gradient(135deg,rgba(57,112,154,.72),rgba(66,126,170,.58))!important;
+  color:#fff!important;
+  box-shadow:inset 3px 0 0 #34b9e5!important;
+}
+.submenu > .leaf-main.leaf-main-equal:hover .sub-label,
+.submenu > .leaf-main.leaf-main-equal.active .sub-label{
+  color:#fff!important;
+  font-size:13px!important;
+  font-weight:700!important;
+}

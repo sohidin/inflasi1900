@@ -237,3 +237,10 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Clone export memakai warna solid, border tipis, radius dan ukuran pill yang sama seperti web.
 - Inset box-shadow dihilangkan hanya saat export karena dapat dirender tidak konsisten oleh html2canvas.
 - Tampilan web tidak diubah.
+
+## V10.17 — Menu Inflasi Diseragamkan
+- Inflasi Asem dan Inflasi Final sekarang mengikuti persis gaya MtM/YtD/YoY.
+- Font Plus Jakarta Sans, ukuran 13px, weight 700.
+- Tinggi 43px, padding 9px 10px, radius 11px.
+- Ikon, hover, active state, dan chevron kanan diseragamkan.
+- Tidak mengubah logika data, API, download, atau Apps Script.
