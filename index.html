@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.33">
+  <link rel="stylesheet" href="style.css?v=10.34">
 </head>
 <body>
   <!-- LOGIN -->
@@ -20,7 +20,7 @@
     <div class="login-bg-shape shape-2"></div>
 
     <div class="login-card glass">
-      <div class="logo-pill">BPS</div>
+      <div class="logo-pill">BPS1900</div>
       <div class="login-copy">
         <span class="eyebrow">SISTEM MONITORING</span>
         <h1>Dashboard Inflasi 1900</h1>
@@ -35,7 +35,10 @@
         <input id="password" type="password" autocomplete="current-password" required>
 
         <button class="btn btn-primary btn-block" type="submit">Masuk ke Dashboard</button>
-        <div id="loginMessage" class="form-message"></div>
+        <div id="loginMessage" class="login-status" aria-live="polite">
+          <span class="login-status-dot"></span>
+          <span id="loginStatusText">Siap masuk ke dashboard</span>
+        </div>
       </form>
     </div>
   </section>
@@ -53,10 +56,11 @@
 
       <div class="menu-root">
         <div class="menu-caption dashboard-caption">UTAMA</div>
-        <button id="dashboardMenuBtn" class="dashboard-menu-btn active" type="button">
+        <a id="dashboardMenuBtn" class="dashboard-menu-btn active"
+           href="?view=dashboard" data-view="dashboard" data-source="final">
           <span class="dashboard-menu-icon">⌂</span>
           <span>Dashboard</span>
-        </button>
+        </a>
 
         <div class="menu-caption">DATA SEMENTARA</div>
         <button class="menu-main" data-menu="asem">
@@ -67,23 +71,23 @@
         <div class="submenu" id="submenu-asem">
           <button class="submenu-parent" data-group="asem-mtm"><span class="sub-label"><span class="sub-icon">↔</span>MtM</span><span>›</span></button>
           <div class="submenu-level2" id="asem-mtm">
-            <button data-source="asem" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</button>
-            <button data-source="asem" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</button>
-            <button data-source="asem" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</button>
+            <a href="?view=inflasi&source=asem&period=mtm" data-source="asem" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</a>
+            <a href="?view=andil&source=asem&period=mtm" data-source="asem" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</a>
+            <a href="?view=komoditas&source=asem&period=mtm" data-source="asem" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</a>
           </div>
 
           <button class="submenu-parent" data-group="asem-ytd"><span class="sub-label"><span class="sub-icon">↗</span>YtD</span><span>›</span></button>
           <div class="submenu-level2" id="asem-ytd">
-            <button data-source="asem" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</button>
-            <button data-source="asem" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</button>
-            <button data-source="asem" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</button>
+            <a href="?view=inflasi&source=asem&period=ytd" data-source="asem" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</a>
+            <a href="?view=andil&source=asem&period=ytd" data-source="asem" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</a>
+            <a href="?view=komoditas&source=asem&period=ytd" data-source="asem" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</a>
           </div>
 
           <button class="submenu-parent" data-group="asem-yoy"><span class="sub-label"><span class="sub-icon">◌</span>YoY</span><span>›</span></button>
           <div class="submenu-level2" id="asem-yoy">
-            <button data-source="asem" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</button>
-            <button data-source="asem" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</button>
-            <button data-source="asem" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</button>
+            <a href="?view=inflasi&source=asem&period=yoy" data-source="asem" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</a>
+            <a href="?view=andil&source=asem&period=yoy" data-source="asem" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</a>
+            <a href="?view=komoditas&source=asem&period=yoy" data-source="asem" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</a>
           </div>
 
           <button data-source="asem" data-view="headline" class="leaf-main leaf-main-equal"><span class="sub-label"><span class="sub-icon">▦</span>Inflasi Asem</span><span class="leaf-main-chevron">›</span></button>
@@ -106,23 +110,23 @@
         <div class="submenu" id="submenu-final">
           <button class="submenu-parent" data-group="final-mtm"><span class="sub-label"><span class="sub-icon">↔</span>MtM</span><span>›</span></button>
           <div class="submenu-level2" id="final-mtm">
-            <button data-source="final" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</button>
-            <button data-source="final" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</button>
-            <button data-source="final" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</button>
+            <a href="?view=inflasi&source=final&period=mtm" data-source="final" data-period="mtm" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi MtM</a>
+            <a href="?view=andil&source=final&period=mtm" data-source="final" data-period="mtm" data-view="andil"><span class="leaf-icon">◇</span>Andil MtM</a>
+            <a href="?view=komoditas&source=final&period=mtm" data-source="final" data-period="mtm" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil MtM</a>
           </div>
 
           <button class="submenu-parent" data-group="final-ytd"><span class="sub-label"><span class="sub-icon">↗</span>YtD</span><span>›</span></button>
           <div class="submenu-level2" id="final-ytd">
-            <button data-source="final" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</button>
-            <button data-source="final" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</button>
-            <button data-source="final" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</button>
+            <a href="?view=inflasi&source=final&period=ytd" data-source="final" data-period="ytd" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YtD</a>
+            <a href="?view=andil&source=final&period=ytd" data-source="final" data-period="ytd" data-view="andil"><span class="leaf-icon">◇</span>Andil YtD</a>
+            <a href="?view=komoditas&source=final&period=ytd" data-source="final" data-period="ytd" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YtD</a>
           </div>
 
           <button class="submenu-parent" data-group="final-yoy"><span class="sub-label"><span class="sub-icon">◌</span>YoY</span><span>›</span></button>
           <div class="submenu-level2" id="final-yoy">
-            <button data-source="final" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</button>
-            <button data-source="final" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</button>
-            <button data-source="final" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</button>
+            <a href="?view=inflasi&source=final&period=yoy" data-source="final" data-period="yoy" data-view="inflasi"><span class="leaf-icon">▦</span>Inflasi YoY</a>
+            <a href="?view=andil&source=final&period=yoy" data-source="final" data-period="yoy" data-view="andil"><span class="leaf-icon">◇</span>Andil YoY</a>
+            <a href="?view=komoditas&source=final&period=yoy" data-source="final" data-period="yoy" data-view="komoditas"><span class="leaf-icon">◆</span>Komoditas Andil YoY</a>
           </div>
 
           <button data-source="final" data-view="headline" class="leaf-main leaf-main-equal"><span class="sub-label"><span class="sub-icon">▦</span>Inflasi Final</span><span class="leaf-main-chevron">›</span></button>
@@ -528,6 +532,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.33"></script>
+  <script src="script.js?v=10.34"></script>
 </body>
 </html>

@@ -506,3 +506,21 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Dashboard tidak lagi berhenti hanya karena endpoint Dashboard custom gagal.
 - Pemilihan wilayah tetap client-side.
 - `Code.gs` berubah dan harus deploy New version.
+
+
+## V10.34 — Login Redesign + New Tab
+- Dialog login diperbesar dan background dibuat lebih eye-catching.
+- Badge login berubah menjadi `BPS1900`.
+- Pesan login:
+  - `Siap masuk ke dashboard`
+  - `Membuka akses dashboard…`
+  - `Akses diterima • dashboard siap dibuka`
+  - error: `Akses belum berhasil • periksa akun lalu coba lagi`
+- Token login disimpan ke localStorage selama 12 jam agar dapat dipakai lintas tab.
+- Leaf menu dan Dashboard menjadi link (`<a href>`), sehingga browser menampilkan
+  native `Open link in new tab` saat klik kanan.
+- Klik kiri tetap menggunakan SPA tanpa reload.
+- Tab baru membaca query `view/source/period` dan langsung membuka menu tersebut.
+- Karena localStorage dibagi antar tab pada origin yang sama, tab baru tidak meminta login ulang.
+- Logout menghapus sessionStorage dan localStorage token.
+- Code.gs tidak berubah pada V10.34.

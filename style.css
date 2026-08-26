@@ -3095,3 +3095,224 @@ table,
 .dashboard-fast-status.is-loading{
   min-width:88px;
 }
+
+
+/* ==========================================================================
+   V10.34 — LOGIN REDESIGN + NATIVE MENU LINKS
+   ========================================================================== */
+
+.login-page{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 7% 7%,rgba(61,181,232,.28) 0 190px,transparent 193px),
+    radial-gradient(circle at 93% 88%,rgba(70,196,206,.23) 0 230px,transparent 233px),
+    radial-gradient(circle at 77% 12%,rgba(27,121,195,.09) 0 155px,transparent 158px),
+    linear-gradient(135deg,#edf8ff 0%,#f9fcff 50%,#eef8fb 100%)!important;
+}
+
+.login-page::before{
+  content:"";
+  position:absolute;
+  width:410px;height:410px;
+  top:-190px;right:-155px;
+  border-radius:50%;
+  border:1px solid rgba(35,146,202,.13);
+  box-shadow:
+    0 0 0 48px rgba(56,172,216,.04),
+    0 0 0 96px rgba(56,172,216,.025);
+  pointer-events:none;
+}
+
+.login-page::after{
+  content:"";
+  position:absolute;
+  width:300px;height:300px;
+  left:-125px;bottom:-130px;
+  border-radius:50%;
+  background:linear-gradient(135deg,rgba(44,173,221,.09),rgba(58,197,173,.05));
+  pointer-events:none;
+}
+
+.login-card{
+  width:min(570px,calc(100vw - 40px))!important;
+  min-height:630px!important;
+  padding:44px 46px 34px!important;
+  border-radius:29px!important;
+  border:1px solid rgba(255,255,255,.94)!important;
+  background:rgba(255,255,255,.94)!important;
+  box-shadow:
+    0 32px 80px rgba(16,67,103,.16),
+    0 8px 24px rgba(39,106,146,.07)!important;
+}
+
+.logo-pill{
+  width:112px!important;
+  height:78px!important;
+  border-radius:22px!important;
+  font-size:16px!important;
+  font-weight:820!important;
+  letter-spacing:-.04em!important;
+  background:linear-gradient(145deg,#0876b9,#18a8d8)!important;
+  box-shadow:0 12px 28px rgba(10,132,188,.23)!important;
+}
+
+.login-copy .eyebrow{
+  margin-top:12px!important;
+  font-size:11px!important;
+  color:#4e85aa!important;
+  letter-spacing:.12em!important;
+}
+
+.login-copy h1{
+  margin-top:16px!important;
+  font-size:32px!important;
+  line-height:1.13!important;
+  letter-spacing:-.038em!important;
+}
+
+.login-copy p{
+  font-size:14px!important;
+  line-height:1.58!important;
+  color:#72869a!important;
+}
+
+#loginForm label{
+  display:block;
+  margin-top:18px!important;
+  margin-bottom:6px!important;
+  color:#3f5468!important;
+  font-size:11px!important;
+  font-weight:700!important;
+}
+
+#loginForm input{
+  height:55px!important;
+  padding:0 16px!important;
+  border:1px solid #d7e4ed!important;
+  border-radius:13px!important;
+  background:#fbfdff!important;
+  font-size:14px!important;
+  font-weight:520!important;
+  transition:border-color .14s ease,box-shadow .14s ease,background .14s ease!important;
+}
+
+#loginForm input:focus{
+  outline:none!important;
+  background:#fff!important;
+  border-color:#3ba9da!important;
+  box-shadow:0 0 0 4px rgba(43,160,214,.10)!important;
+}
+
+#loginForm .btn-block{
+  min-height:53px!important;
+  margin-top:23px!important;
+  border-radius:13px!important;
+  font-size:14px!important;
+  font-weight:720!important;
+  background:linear-gradient(90deg,#0e78b9,#159fd5)!important;
+  box-shadow:0 11px 25px rgba(17,137,195,.22)!important;
+}
+
+#loginForm .btn-block:disabled{
+  opacity:.78;
+  cursor:wait;
+}
+
+.login-status{
+  min-height:39px;
+  margin-top:13px;
+  padding:9px 12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  border-radius:10px;
+  border:1px solid #e3edf4;
+  background:#f5f9fc;
+  color:#6f8497;
+  font-size:10.5px;
+  font-weight:620;
+}
+
+.login-status-dot{
+  width:7px;height:7px;
+  border-radius:50%;
+  flex:0 0 7px;
+  background:#89a4b7;
+}
+
+.login-status.is-loading{
+  color:#80691f;
+  background:#fff9e7;
+  border-color:#f2e4aa;
+}
+.login-status.is-loading .login-status-dot{
+  background:#e5b32c;
+  animation:loginPulseV34 .8s ease-in-out infinite alternate;
+}
+.login-status.is-success{
+  color:#17725d;
+  background:#ecfaf5;
+  border-color:#ccecdf;
+}
+.login-status.is-success .login-status-dot{background:#20b98d}
+.login-status.is-error{
+  color:#a94941;
+  background:#fff2f0;
+  border-color:#f0d2ce;
+}
+.login-status.is-error .login-status-dot{background:#df665d}
+
+@keyframes loginPulseV34{
+  to{opacity:.35;transform:scale(.72)}
+}
+
+/* Leaf menus are now real anchors, enabling native right-click > Open link in new tab. */
+.sidebar a[data-view]{
+  text-decoration:none!important;
+  box-sizing:border-box;
+  cursor:pointer;
+}
+
+.submenu-level2 a[data-view],
+.submenu > a.leaf-main{
+  width:100%;
+  min-height:40px;
+  padding:8px 12px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:inherit;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font:inherit;
+  text-align:left;
+}
+
+.submenu-level2 a[data-view]:hover,
+.submenu > a.leaf-main:hover{
+  background:rgba(255,255,255,.06);
+}
+
+.submenu-level2 a[data-view].active,
+.submenu > a.leaf-main.active{
+  background:rgba(70,143,192,.55);
+  color:#fff;
+}
+
+.dashboard-menu-btn{
+  text-decoration:none!important;
+}
+
+@media(max-width:650px){
+  .login-card{
+    width:calc(100vw - 24px)!important;
+    min-height:auto!important;
+    padding:31px 24px 26px!important;
+    border-radius:23px!important;
+  }
+  .login-copy h1{font-size:27px!important}
+  .logo-pill{width:100px!important;height:70px!important}
+}

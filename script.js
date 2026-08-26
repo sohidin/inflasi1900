@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbySI-_JRUMMAC_GlAINv71T982DqzGivKyzFrh8UA_MZqc4ofUyLsZmYHLq_jDWByR8/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbxRShwpgw6QGet99PmR4dX7NznoeIR0p0FIFHdavU6XY3pe-1YCnXJt-UxHeegnbT6y/exec"
 };
 
 // ===========================================================================
@@ -141,17 +141,104 @@ function localCacheSet(name,data){
   }catch(_){}
 }
 
+
+// ===========================================================================
+// SHARED LOGIN SESSION + DEEP LINKS (V10.34)
+// ===========================================================================
+const SHARED_TOKEN_KEY="inflasi_token_shared";
+const SHARED_TOKEN_TIME_KEY="inflasi_token_shared_time";
+const SHARED_TOKEN_TTL=12*60*60*1000;
+
+function saveSharedSession(token){
+  try{
+    localStorage.setItem(SHARED_TOKEN_KEY,String(token||""));
+    localStorage.setItem(SHARED_TOKEN_TIME_KEY,String(Date.now()));
+  }catch(_){}
+}
+
+function getSharedSessionToken(){
+  try{
+    const token=localStorage.getItem(SHARED_TOKEN_KEY)||"";
+    const time=Number(localStorage.getItem(SHARED_TOKEN_TIME_KEY)||0);
+    if(!token || !time) return "";
+    if(Date.now()-time>SHARED_TOKEN_TTL){
+      clearSharedSession();
+      return "";
+    }
+    return token;
+  }catch(_){
+    return "";
+  }
+}
+
+function clearSharedSession(){
+  try{
+    localStorage.removeItem(SHARED_TOKEN_KEY);
+    localStorage.removeItem(SHARED_TOKEN_TIME_KEY);
+    sessionStorage.removeItem("inflasi_token");
+  }catch(_){}
+}
+
+function setLoginMessage(text,type="idle"){
+  const box=document.getElementById("loginMessage");
+  const label=document.getElementById("loginStatusText");
+  if(label) label.textContent=text;
+  if(!box) return;
+  box.classList.remove("is-loading","is-success","is-error");
+  if(type==="loading") box.classList.add("is-loading");
+  if(type==="success") box.classList.add("is-success");
+  if(type==="error") box.classList.add("is-error");
+}
+
+function currentRoute(){
+  const q=new URLSearchParams(window.location.search);
+  return {
+    view:q.get("view")||"",
+    source:q.get("source")||"",
+    period:q.get("period")||""
+  };
+}
+
+function routeMatches(el,route){
+  if(!el || !route?.view) return false;
+  if(String(el.dataset.view||"")!==String(route.view)) return false;
+  if(route.source && String(el.dataset.source||"")!==String(route.source)) return false;
+  if(route.period && String(el.dataset.period||"")!==String(route.period)) return false;
+  return true;
+}
+
+async function openRouteFromUrl(){
+  const route=currentRoute();
+  if(!route.view || route.view==="dashboard") return false;
+
+  const target=[...document.querySelectorAll("[data-view]")]
+    .find(el=>routeMatches(el,route));
+
+  if(!target) return false;
+  await handleLeafClick(target);
+  return true;
+}
+
 // ===========================================================================
 // INIT
 // ===========================================================================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   bindLogin();
   bindAccordion();
   bindAppEvents();
 
-  if (sessionStorage.getItem("inflasi_token")) {
-    showApp();
-  } else {
+  // localStorage is shared by tabs on the same site, so a menu opened
+  // in a new tab can reuse the active login session.
+  const sharedToken=getSharedSessionToken();
+  const legacyToken=sessionStorage.getItem("inflasi_token")||"";
+  const token=sharedToken||legacyToken;
+
+  if(token){
+    sessionStorage.setItem("inflasi_token",token);
+    if(!sharedToken) saveSharedSession(token);
+    await showApp();
+    await openRouteFromUrl();
+  }else{
     showLogin();
   }
 });
@@ -180,18 +267,43 @@ async function showApp() {
 function bindLogin() {
   document.getElementById("loginForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const msg = document.getElementById("loginMessage");
-    msg.textContent = "Memeriksa...";
+
+    const submit=e.currentTarget.querySelector('button[type="submit"]');
+    const username=document.getElementById("username").value.trim();
+    const password=document.getElementById("password").value;
+
+    setLoginMessage("Membuka akses dashboard…","loading");
+    if(submit){
+      submit.disabled=true;
+      submit.dataset.originalText=submit.textContent;
+      submit.textContent="Menghubungkan…";
+    }
+
     try {
       const r = await Api.request({
-        action: "login",
-        username: document.getElementById("username").value.trim(),
-        password: document.getElementById("password").value
+        action:"login",
+        username,
+        password
       });
-      sessionStorage.setItem("inflasi_token", r.token);
-      msg.textContent = "";
+
+      sessionStorage.setItem("inflasi_token",r.token);
+      saveSharedSession(r.token);
+
+      setLoginMessage("Akses diterima • dashboard siap dibuka","success");
+
+      // Transition immediately after authentication; dashboard data can continue
+      // loading inside the app instead of holding the user on the login page.
       await showApp();
-    } catch (err) { msg.textContent = err.message; }
+      await openRouteFromUrl();
+
+    } catch (err) {
+      setLoginMessage("Akses belum berhasil • periksa akun lalu coba lagi","error");
+    } finally {
+      if(submit){
+        submit.disabled=false;
+        submit.textContent=submit.dataset.originalText||"Masuk ke Dashboard";
+      }
+    }
   });
 }
 
@@ -204,6 +316,11 @@ function bindAccordion() {
   if (!menuRoot) return;
 
   menuRoot.addEventListener("click", e => {
+    const appLink=e.target.closest("a[data-view]");
+    if(appLink && e.button===0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey){
+      e.preventDefault();
+    }
+
     const dashboardBtn = e.target.closest("#dashboardMenuBtn");
     if (dashboardBtn) {
       document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
@@ -290,7 +407,11 @@ function bindAppEvents() {
 
   document.getElementById("logoutBtn").addEventListener("click", () => {
     sessionStorage.clear();
+    clearSharedSession();
+    // Remove deep-link parameters so login starts cleanly.
+    history.replaceState(null,"",window.location.pathname);
     showLogin();
+    setLoginMessage("Siap masuk ke dashboard");
   });
 
   document.getElementById("spreadsheetBtn")?.addEventListener("click", () => {
