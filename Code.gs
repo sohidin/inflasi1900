@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.36"
+  CACHE_VERSION: "v10.37"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -58,7 +58,10 @@ function snapshotStatus_(){
     };
   }
   try{
-    return JSON.parse(raw);
+    const status=JSON.parse(raw);
+    status.sharedCache=true;
+    status.scope="server";
+    return status;
   }catch(_){
     return {
       ready:false,

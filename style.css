@@ -3440,3 +3440,25 @@ table,
 }
 .refresh-modal-meta strong{color:#38576c;font-weight:750}
 #closeRefreshModalBtn{margin-top:10px}
+
+
+/* ==========================================================================
+   V10.37 — SHARED SERVER CACHE STATUS
+   ========================================================================== */
+
+.snapshot-status-line strong.is-ready{
+  color:#8ff0ce!important;
+}
+
+.data-readiness-head strong{
+  max-width:130px;
+}
+
+.data-readiness-row strong{
+  white-space:nowrap;
+}
+
+/* Server siap is more positive than generic local "Siap". */
+.data-readiness-row strong{
+  letter-spacing:-.01em;
+}

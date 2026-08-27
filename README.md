@@ -558,3 +558,38 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Modal progress menunjukkan proses refresh dan durasi.
 - Gunakan tombol ini setelah data spreadsheet selesai diperbarui.
 - Code.gs berubah: wajib deploy Apps Script sebagai New version.
+
+
+## V10.37 — Shared Server Cache Across Devices
+### Tujuan
+Satu akun dapat digunakan di beberapa laptop/HP tanpa setiap device menjalankan
+prefetch berat yang sama.
+
+### Cara kerja
+1. Admin update spreadsheet.
+2. Admin klik `Refresh Data Web` satu kali.
+3. Apps Script membuat revision baru dan memanaskan CacheService.
+4. `snapshotStatus` menyimpan `ready=true` + revision.
+5. Device A/B/C saat login hanya mengecek status kecil tersebut.
+6. Jika server cache = SIAP:
+   - heavy smart-prefetch dilewati;
+   - menu mengambil data dari shared Apps Script cache saat diperlukan.
+7. Browser tetap punya memory/local cache sendiri sebagai lapisan tambahan.
+
+### Revision
+- Browser menyimpan `SERVER_REVISION_KEY`.
+- Bila revision server berubah:
+  - cache data browser lama dihapus;
+  - token/login tidak dihapus;
+  - revision baru disimpan.
+- Device baru cukup menyimpan revision server yang aktif.
+
+### Dampak
+- Refresh cukup satu kali walaupun aplikasi dibuka dari device berbeda.
+- Device baru tidak melakukan pemanasan ulang seluruh dataset.
+- Beban Apps Script lebih kecil.
+- Filter/menu tetap memakai existing memory cache setelah pertama dibuka.
+
+### Deployment
+- Code.gs berubah sedikit untuk metadata snapshot.
+- Deploy Apps Script sebagai New version.

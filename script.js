@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxWCnc-Ijpeqxq5j1jA4boU6ZvbStH_nVCzVYwK2pBsHtVRvfRGTTo4OpFDp22OBrua/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbwYS46F1H9CP7_O7xRzoQRSn6X5fK3HsodHRXyhhwjG1JzYSbVBgWPOaVO4zNSb2LRt/exec"
 };
 
 // ===========================================================================
@@ -219,6 +219,7 @@ async function openRouteFromUrl(){
 
   if(!target) return false;
   await handleLeafClick(target);
+  startBackgroundWorkSmart();
   return true;
 }
 
@@ -255,6 +256,7 @@ async function showApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("appPage").classList.remove("hidden");
   loadSnapshotStatus();
+  // Server cache status is checked after the visible view starts loading.
 
   const route=currentRoute();
 
@@ -424,6 +426,122 @@ async function handleLeafClick(btn) {
 }
 
 
+
+// ===========================================================================
+// V10.37 — SHARED SERVER CACHE AWARENESS
+// ===========================================================================
+const SERVER_REVISION_KEY="inflasi_server_revision_v10_37";
+
+function getKnownServerRevision(){
+  try{
+    return localStorage.getItem(SERVER_REVISION_KEY)||"";
+  }catch(_){
+    return "";
+  }
+}
+
+function saveKnownServerRevision(revision){
+  try{
+    if(revision) localStorage.setItem(SERVER_REVISION_KEY,String(revision));
+  }catch(_){}
+}
+
+function markServerCacheReady(status){
+  if(!status?.ready) return;
+
+  setSourceReadyStatus?.("dashboard","ready","Server siap");
+  setSourceReadyStatus?.("asem","ready","Server siap");
+  setSourceReadyStatus?.("final","ready","Server siap");
+
+  const title=document.getElementById("dataReadinessTitle");
+  const badge=document.getElementById("dataReadinessOverall");
+  if(title) title.textContent="Cache server siap";
+  if(badge){
+    badge.classList.remove("is-loading");
+    badge.classList.add("is-ready");
+    badge.textContent="SIAP";
+  }
+}
+
+function clearLocalDataForNewRevision(){
+  try{
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(
+        key &&
+        key.startsWith("inflasi_") &&
+        key!==SERVER_REVISION_KEY &&
+        !key.includes("token") &&
+        !key.includes("session")
+      ){
+        keys.push(key);
+      }
+    }
+    keys.forEach(k=>localStorage.removeItem(k));
+  }catch(_){}
+
+  state._viewCache?.clear?.();
+  state._viewInflight?.clear?.();
+  state.dashboardYearCache?.clear?.();
+
+  state.filterCache={asem:null,final:null};
+  state.finalFilterCache=null;
+  state.dashboardFilterCache=null;
+  state._lastViewKey="";
+  state._prefetchStarted=false;
+}
+
+async function initializeSharedServerCache(){
+  try{
+    const status=await Api.request({action:"snapshotStatus"});
+    renderSnapshotStatus?.(status);
+
+    if(!status?.ready){
+      // Server snapshot has not been prepared. Device may use normal smart prefetch.
+      return {ready:false,changed:false,status};
+    }
+
+    const known=getKnownServerRevision();
+    const current=String(status.revision||"");
+    const changed=!!current && known!==current;
+
+    // New device: known="" so this is treated as a new revision, but there is
+    // nothing costly to invalidate; it simply stores the server revision.
+    if(changed && known){
+      clearLocalDataForNewRevision();
+    }
+
+    if(current) saveKnownServerRevision(current);
+    markServerCacheReady(status);
+
+    return {ready:true,changed,status};
+
+  }catch(err){
+    console.warn("Shared server cache status unavailable:",err);
+    return {ready:false,changed:false,status:null};
+  }
+}
+
+async function startBackgroundWorkSmart(){
+  const server=await initializeSharedServerCache();
+
+  if(server.ready){
+    // IMPORTANT:
+    // CacheService is shared across devices. If the server snapshot is ready,
+    // do NOT repeat the large hotset prefetch on every browser/device.
+    //
+    // Only fetch lightweight filters on demand when a menu is clicked.
+    console.info("Shared server cache ready; heavy browser prefetch skipped.");
+    return;
+  }
+
+  // Snapshot is not ready yet -> fall back to existing smart prefetch.
+  if(typeof startSmartBackgroundPrefetch==="function"){
+    startBackgroundWorkSmart();
+  }
+}
+
 // ===========================================================================
 // V10.36 — REFRESH DATA WEB
 // ===========================================================================
@@ -454,7 +572,7 @@ function renderSnapshotStatus(status){
   }
 
   if(status.ready){
-    el.textContent=`Siap • ${snapshotTimeText(status.lastRefresh)}`;
+    el.textContent=`SIAP • ${snapshotTimeText(status.lastRefresh)}`;
     el.classList.add("is-ready");
   }else{
     el.textContent=status.message || "Belum siap";
@@ -482,6 +600,7 @@ function clearAppDataCache(){
     for(let i=0;i<localStorage.length;i++){
       const key=localStorage.key(i);
       if(key && key.startsWith("inflasi_") &&
+         key!==SERVER_REVISION_KEY &&
          !key.includes("token") &&
          !key.includes("session")){
         keys.push(key);
@@ -552,6 +671,8 @@ async function refreshDataWeb(){
     refreshProgress(100,"Data terbaru siap digunakan");
     clearAppDataCache();
     renderSnapshotStatus(r);
+    saveKnownServerRevision(r.revision);
+    markServerCacheReady(r);
 
     if(title) title.textContent="Refresh data berhasil";
     if(text){
@@ -564,9 +685,7 @@ async function refreshDataWeb(){
     loadDashboard()
       .then(()=>{
         setSourceReadyStatus?.("dashboard","ready","Siap");
-        if(typeof startSmartBackgroundPrefetch==="function"){
-          startSmartBackgroundPrefetch();
-        }
+        startBackgroundWorkSmart();
       })
       .catch(()=>{
         setSourceReadyStatus?.("dashboard","error","Coba lagi");
@@ -1140,6 +1259,7 @@ async function loadDashboard(){
     }
 
     setDashboardFastStatus("Siap");
+    startBackgroundWorkSmart();
     setSourceReadyStatus("dashboard","ready","Siap");
     setTimeout(startBackgroundPrefetch,650);
   }catch(err){
@@ -1147,6 +1267,7 @@ async function loadDashboard(){
 
     if(persisted){
       setDashboardFastStatus("Cache aktif");
+      startBackgroundWorkSmart();
       setTimeout(startBackgroundPrefetch,650);
       return;
     }
