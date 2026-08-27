@@ -29,6 +29,9 @@ const state = {
   _viewCache: new Map(),
   _viewInflight: new Map(),
   _lastViewKey: "",
+  _smartPrefetchTimers: new Map(),
+  _filterPrefetchTimer: null,
+  _sourceReady: {dashboard:false,asem:false,final:false},
   pageLength: Number(localStorage.getItem("inflasi_page_length") || 25),
 
   // [OPT-1] Prefetch queue — menyimpan permintaan filter/data yang sedang berjalan
@@ -252,13 +255,26 @@ async function showApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("appPage").classList.remove("hidden");
 
-  state.view = "dashboard";
-  state.source = "final";
-  document.querySelectorAll("[data-view]").forEach(x => x.classList.remove("active"));
-  document.getElementById("dashboardMenuBtn")?.classList.add("active");
+  const route=currentRoute();
 
-  // Dashboard memakai endpoint ringkas sendiri; tabel besar tidak dimuat saat login.
-  await loadDashboard();
+  // A deep-linked new tab should not waste time loading Dashboard first.
+  if(route.view && route.view!=="dashboard"){
+    setSourceReadyStatus("dashboard","ready","Lewati");
+    return;
+  }
+
+  state.view="dashboard";
+  state.source="final";
+  document.querySelectorAll("[data-view]").forEach(x=>x.classList.remove("active"));
+  document.getElementById("dashboardMenuBtn")?.classList.add("active");
+  setSourceReadyStatus("dashboard","loading","Memuat");
+
+  // Transition away from login immediately; Dashboard continues asynchronously.
+  loadDashboard().then(()=>{
+    setSourceReadyStatus("dashboard","ready","Siap");
+  }).catch(()=>{
+    setSourceReadyStatus("dashboard","error","Coba lagi");
+  });
 }
 
 // ===========================================================================
@@ -314,6 +330,19 @@ function bindAccordion() {
   // [OPT-5] Gunakan event delegation pada container, bukan listener per-button.
   const menuRoot = document.querySelector(".menu-root");
   if (!menuRoot) return;
+
+  // Hover-intent: start preparing a leaf before the user clicks it.
+  menuRoot.addEventListener("pointerover",e=>{
+    const leaf=e.target.closest("[data-view]");
+    if(!leaf || leaf.dataset.view==="dashboard") return;
+    prefetchLeafView(leaf,140);
+  });
+
+  menuRoot.addEventListener("pointerout",e=>{
+    const leaf=e.target.closest("[data-view]");
+    if(!leaf || leaf.dataset.view==="dashboard") return;
+    cancelLeafPrefetch(leaf);
+  });
 
   menuRoot.addEventListener("click", e => {
     const appLink=e.target.closest("a[data-view]");
@@ -376,6 +405,8 @@ async function handleLeafClick(btn) {
   state.period = btn.dataset.period || "";
   state.view = btn.dataset.view;
 
+  setSourceReadyStatus(state.source,"loading","Membuka");
+
   if (previousSource !== state.source || !state.filterCache[state.source]) {
     await loadSourceFilters();
   } else {
@@ -388,6 +419,7 @@ async function handleLeafClick(btn) {
   }
 
   await loadCurrentView();
+  setSourceReadyStatus(state.source,"ready","Siap");
 }
 
 // ===========================================================================
@@ -396,18 +428,31 @@ async function handleLeafClick(btn) {
 function bindAppEvents() {
   document.getElementById("applyFilterBtn").addEventListener("click", async () => {
     state._lastViewKey="";
+    setSourceReadyStatus(state.source,"loading","Memuat");
     if (state.source === "asem" && state.view === "headline") {
       await ensureFinalComparisonFilters();
     }
     await loadCurrentView();
+    setSourceReadyStatus(state.source,"ready","Siap");
   });
 
-  document.getElementById("filterYear").addEventListener("change", updateMonths);
-  document.getElementById("compareFinalYear")?.addEventListener("change", updateCompareFinalMonths);
+  document.getElementById("filterYear").addEventListener("change", () => {
+    updateMonths();
+    scheduleCurrentFilterPrefetch();
+  });
+  document.getElementById("filterMonth")?.addEventListener("change", scheduleCurrentFilterPrefetch);
+  document.getElementById("filterFlag")?.addEventListener("change", scheduleCurrentFilterPrefetch);
+  document.getElementById("compareFinalYear")?.addEventListener("change", () => {
+    updateCompareFinalMonths();
+    scheduleCurrentFilterPrefetch();
+  });
+  document.getElementById("compareFinalMonth")?.addEventListener("change", scheduleCurrentFilterPrefetch);
 
   document.getElementById("logoutBtn").addEventListener("click", () => {
     sessionStorage.clear();
     clearSharedSession();
+    state._sourceReady={dashboard:false,asem:false,final:false};
+    refreshOverallReadiness();
     // Remove deep-link parameters so login starts cleanly.
     history.replaceState(null,"",window.location.pathname);
     showLogin();
@@ -895,6 +940,7 @@ async function loadDashboard(){
     hydrateDashboardControls(data,data.years||[]);
     renderDashboardFromYearData();
     setDashboardFastStatus("Cache siap");
+    setSourceReadyStatus("dashboard","ready","Cache siap");
   }else{
     setDashboardFastStatus("Memuat data terbaru…",true);
   }
@@ -926,6 +972,7 @@ async function loadDashboard(){
     }
 
     setDashboardFastStatus("Siap");
+    setSourceReadyStatus("dashboard","ready","Siap");
     setTimeout(startBackgroundPrefetch,650);
   }catch(err){
     console.error("Dashboard bootstrap error:",err);
@@ -1057,62 +1104,22 @@ function startBackgroundPrefetch(){
   state._prefetchStarted=true;
 
   const task=async()=>{
-    try{
-      // Seed memory cache instantly from localStorage.
-      ["asem","final"].forEach(source=>{
-        const local=localCacheGet(`filters_${source}`,LOCAL_TTL.filters);
-        if(local){
-          state.filterCache[source]=local;
-          if(source==="final") state.finalFilterCache=local;
-        }
-      });
+    // Give Dashboard/browser paint priority.
+    await new Promise(r=>setTimeout(r,450));
 
-      // Revalidate both filter sets in parallel.
-      const [a,f]=await Promise.all([
-        cachedApi("filters",{action:"filters",source:"asem"},20*60*1000),
-        cachedApi("filters",{action:"filters",source:"final"},20*60*1000)
-      ]);
+    // Sequential source preparation is intentionally more efficient than loading all raw data at login.
+    await prefetchSourceHotset("asem");
+    await new Promise(r=>setTimeout(r,180));
+    await prefetchSourceHotset("final");
 
-      state.filterCache.asem=a;
-      state.filterCache.final=f;
-      state.finalFilterCache=f;
-      localCacheSet("filters_asem",a);
-      localCacheSet("filters_final",f);
-
-      // Warm latest-period server cache for both main data sources.
-      const warmFor=async(source,filters)=>{
-        const year=String((filters.years||[])[0]||"");
-        const month=String(((filters.monthsByYear||{})[year]||[])[0]||"");
-        const preferredFlag=(filters.flags||[]).includes("3")
-          ? "3"
-          : String((filters.flags||[])[0]??"");
-        if(!year||!month||preferredFlag==="") return;
-
-        try{
-          await Api.request({
-            action:"warmPeriod",
-            source,year,month,flag:preferredFlag
-          });
-        }catch(_){}
-      };
-
-      // Run warmups without blocking anything user-visible.
-      Promise.all([
-        warmFor("asem",a),
-        warmFor("final",f)
-      ]).catch(()=>{});
-
-      prefetchLikelyCurrentView();
-
-    }catch(_){}
-
-    try{await loadUpdatedAt();}catch(_){}
+    // Updated-at metadata is non-blocking.
+    try{ await loadUpdatedAt(); }catch(_){}
   };
 
   if("requestIdleCallback" in window){
-    requestIdleCallback(()=>task(),{timeout:1200});
+    requestIdleCallback(()=>task(),{timeout:1800});
   }else{
-    setTimeout(()=>task(),300);
+    setTimeout(()=>task(),500);
   }
 }
 
@@ -1727,6 +1734,151 @@ function downloadDashboardExcel() {
 
   XLSX.utils.book_append_sheet(wb,ws,"Series Final");
   XLSX.writeFile(wb,dashboardExportName("xlsx"));
+}
+
+
+// ===========================================================================
+// V10.35 — SMART PREFETCH + DATA READINESS
+// ===========================================================================
+function setSourceReadyStatus(source,status,text=""){
+  if(!["dashboard","asem","final"].includes(source)) return;
+  const suffix=source==="dashboard"?"Dashboard":source==="asem"?"Asem":"Final";
+  const dot=document.getElementById("statusDot"+suffix);
+  const label=document.getElementById("statusText"+suffix);
+
+  if(dot){
+    dot.classList.remove("is-loading","is-ready","is-error");
+    dot.classList.add(status==="ready"?"is-ready":status==="error"?"is-error":"is-loading");
+  }
+  if(label){
+    label.textContent=text || (status==="ready"?"Siap":status==="error"?"Gagal":"Menyiapkan");
+  }
+
+  state._sourceReady[source]=status==="ready";
+  refreshOverallReadiness();
+}
+
+function refreshOverallReadiness(){
+  const all=state._sourceReady.dashboard && state._sourceReady.asem && state._sourceReady.final;
+  const any=state._sourceReady.dashboard || state._sourceReady.asem || state._sourceReady.final;
+  const title=document.getElementById("dataReadinessTitle");
+  const badge=document.getElementById("dataReadinessOverall");
+
+  if(title) title.textContent=all?"Cache data siap":any?"Cache sedang disiapkan":"Menyiapkan data";
+  if(badge){
+    badge.classList.remove("is-loading","is-ready");
+    badge.classList.add(all?"is-ready":"is-loading");
+    badge.textContent=all?"SIAP":"PROSES";
+  }
+
+  if(all){
+    const el=document.getElementById("dataReadinessTime");
+    if(el) el.textContent=new Date().toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  }
+}
+
+function sourceLatestSelection(source){
+  const f=state.filterCache[source];
+  if(!f) return null;
+  const year=String((f.years||[])[0]||"");
+  const month=String(((f.monthsByYear||{})[year]||[])[0]||"");
+  const flag=(f.flags||[]).includes("3")?"3":String((f.flags||[])[0]??"");
+  if(!year||!month||flag==="") return null;
+  return {year,month,flag};
+}
+
+async function ensurePrefetchFilters(source){
+  if(state.filterCache[source]) return state.filterCache[source];
+  const local=localCacheGet(`filters_${source}`,LOCAL_TTL.filters);
+  if(local){
+    state.filterCache[source]=local;
+    if(source==="final") state.finalFilterCache=local;
+    return local;
+  }
+  const f=await cachedApi("filters",{action:"filters",source},20*60*1000);
+  state.filterCache[source]=f;
+  if(source==="final") state.finalFilterCache=f;
+  localCacheSet(`filters_${source}`,f);
+  return f;
+}
+
+async function prefetchTarget({source,period,view,year,month,flag}){
+  if(!source||!view||!year||!month) return;
+  if(view==="headline"){
+    await cachedViewRequest("headline",{action:"headline",source,year,month,flag:"0"},15*60*1000);
+  }else if(view==="komoditas"){
+    // Commodity is the heaviest view. Warm shared period rows instead of rendering it unnecessarily.
+    await Api.request({action:"warmPeriod",source,year,month,flag});
+  }else{
+    await cachedViewRequest("table",{action:"table",source,period,view,year,month,flag},15*60*1000);
+  }
+}
+
+function prefetchLeafView(btn,delay=140){
+  if(!btn?.dataset?.view || btn.dataset.view==="dashboard") return;
+  const source=btn.dataset.source, period=btn.dataset.period||"", view=btn.dataset.view;
+  if(!source) return;
+  const key=[source,period,view].join("|");
+  if(state._smartPrefetchTimers.has(key)) clearTimeout(state._smartPrefetchTimers.get(key));
+
+  const timer=setTimeout(async()=>{
+    try{
+      await ensurePrefetchFilters(source);
+      const sel=sourceLatestSelection(source);
+      if(!sel) return;
+      await prefetchTarget({source,period,view,...sel});
+    }catch(_){
+      // Prefetch is opportunistic; never disturb the visible page.
+    }finally{
+      state._smartPrefetchTimers.delete(key);
+    }
+  },delay);
+  state._smartPrefetchTimers.set(key,timer);
+}
+
+function cancelLeafPrefetch(btn){
+  if(!btn?.dataset?.view) return;
+  const key=[btn.dataset.source||"",btn.dataset.period||"",btn.dataset.view||""].join("|");
+  const timer=state._smartPrefetchTimers.get(key);
+  if(timer){ clearTimeout(timer); state._smartPrefetchTimers.delete(key); }
+}
+
+function scheduleCurrentFilterPrefetch(){
+  clearTimeout(state._filterPrefetchTimer);
+  state._filterPrefetchTimer=setTimeout(async()=>{
+    if(!state.source || state.view==="dashboard") return;
+    const year=valueOf("filterYear"), month=valueOf("filterMonth");
+    const flag=state.view==="headline"?"0":valueOf("filterFlag");
+    if(!year||!month||flag==="") return;
+    try{
+      if(state.view==="headline" && state.source==="asem"){
+        // Warm both small headline sources used by the comparison view.
+        await cachedViewRequest("headline",{action:"headline",source:"asem",year,month,flag:"0"},15*60*1000);
+      }else{
+        await prefetchTarget({source:state.source,period:state.period,view:state.view,year,month,flag});
+      }
+    }catch(_){}
+  },280);
+}
+
+async function prefetchSourceHotset(source){
+  try{
+    setSourceReadyStatus(source,"loading","Menyiapkan");
+    await ensurePrefetchFilters(source);
+    const sel=sourceLatestSelection(source);
+    if(!sel){ setSourceReadyStatus(source,"ready","Filter siap"); return; }
+
+    // Deliberately small hotset: latest Inflasi MtM/YtD/YoY + headline.
+    // Sequential requests avoid competing with the user's foreground request.
+    for(const period of ["mtm","ytd","yoy"]){
+      await prefetchTarget({source,period,view:"inflasi",...sel});
+    }
+    await prefetchTarget({source,period:"",view:"headline",...sel});
+    setSourceReadyStatus(source,"ready","Siap");
+  }catch(err){
+    console.debug(`Background cache ${source} belum selesai`,err);
+    setSourceReadyStatus(source,"error","Coba lagi");
+  }
 }
 
 // ===========================================================================

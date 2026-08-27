@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.34">
+  <link rel="stylesheet" href="style.css?v=10.35">
 </head>
 <body>
   <!-- LOGIN -->
@@ -138,6 +138,32 @@
               <small>10 sheet dalam 1 Excel</small>
             </span>
           </button>
+        </div>
+      </div>
+
+      <div id="dataReadinessCard" class="data-readiness-card">
+        <div class="data-readiness-head">
+          <div>
+            <span class="data-readiness-kicker">STATUS CACHE</span>
+            <strong id="dataReadinessTitle">Menyiapkan data</strong>
+          </div>
+          <span id="dataReadinessOverall" class="data-ready-badge is-loading">PROSES</span>
+        </div>
+        <div class="data-readiness-row">
+          <span><i id="statusDotDashboard" class="data-status-dot is-loading"></i>Dashboard</span>
+          <strong id="statusTextDashboard">Menunggu</strong>
+        </div>
+        <div class="data-readiness-row">
+          <span><i id="statusDotAsem" class="data-status-dot is-loading"></i>Sementara</span>
+          <strong id="statusTextAsem">Menunggu</strong>
+        </div>
+        <div class="data-readiness-row">
+          <span><i id="statusDotFinal" class="data-status-dot is-loading"></i>Final</span>
+          <strong id="statusTextFinal">Menunggu</strong>
+        </div>
+        <div class="data-readiness-time">
+          <span>Cache siap pukul</span>
+          <strong id="dataReadinessTime">-</strong>
         </div>
       </div>
 
@@ -532,6 +558,6 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.34"></script>
+  <script src="script.js?v=10.35"></script>
 </body>
 </html>

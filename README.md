@@ -524,3 +524,16 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Karena localStorage dibagi antar tab pada origin yang sama, tab baru tidak meminta login ulang.
 - Logout menghapus sessionStorage dan localStorage token.
 - Code.gs tidak berubah pada V10.34.
+
+
+## V10.35 — Smart Prefetch + Status Cache
+- Tidak menarik semua raw data pada login.
+- Login langsung berpindah ke aplikasi; Dashboard dimuat asynchronous.
+- Dashboard selesai -> prefetch Sementara lalu Final secara background dan berurutan.
+- Hotset yang disiapkan: Inflasi MtM, YtD, YoY terbaru + headline Flag 0.
+- Hover leaf menu selama ~140 ms memulai prefetch sebelum klik.
+- Perubahan Tahun/Bulan/Flag menjadwalkan prefetch exact selection setelah 280 ms.
+- Klik Terapkan/leaf menampilkan status Memuat -> Siap.
+- Sidebar menampilkan status Dashboard/Sementara/Final dan badge SIAP ketika ketiganya siap.
+- New-tab deep link tidak membuang waktu memuat Dashboard dulu.
+- Backend tidak diubah; menggunakan cache/warmPeriod yang sudah ada pada V10.34.

@@ -3316,3 +3316,32 @@ table,
   .login-copy h1{font-size:27px!important}
   .logo-pill{width:100px!important;height:70px!important}
 }
+
+
+/* ========================================================================== 
+   V10.35 — DATA READINESS CARD
+   ========================================================================== */
+.data-readiness-card{
+  margin:14px 12px 12px;
+  padding:12px 12px 10px;
+  border-radius:14px;
+  border:1px solid rgba(89,199,226,.28);
+  background:linear-gradient(145deg,rgba(14,113,151,.45),rgba(9,83,123,.48));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.data-readiness-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.data-readiness-kicker{display:block;color:#74cae9;font-size:7.5px;font-weight:850;letter-spacing:.10em;margin-bottom:2px}
+.data-readiness-head strong{display:block;color:#fff;font-size:10.5px;font-weight:720;line-height:1.2}
+.data-ready-badge{padding:4px 7px;border-radius:999px;font-size:7px;font-weight:900;letter-spacing:.06em}
+.data-ready-badge.is-loading{color:#ffe59a;background:rgba(255,206,73,.12);border:1px solid rgba(255,215,107,.17)}
+.data-ready-badge.is-ready{color:#9cf0d5;background:rgba(48,203,155,.12);border:1px solid rgba(82,219,176,.18)}
+.data-readiness-row{min-height:25px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#cbe2ee;font-size:8.5px;border-top:1px solid rgba(255,255,255,.055)}
+.data-readiness-row>span{display:flex;align-items:center;gap:6px}
+.data-readiness-row strong{color:#e9f6fb;font-size:8px;font-weight:650}
+.data-status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:0 0 7px}
+.data-status-dot.is-loading{background:#f5ca5d;box-shadow:0 0 0 3px rgba(245,202,93,.08);animation:dataReadyPulse .9s ease-in-out infinite alternate}
+.data-status-dot.is-ready{background:#48d6a9;box-shadow:0 0 0 3px rgba(72,214,169,.09)}
+.data-status-dot.is-error{background:#ef786f;box-shadow:0 0 0 3px rgba(239,120,111,.09)}
+.data-readiness-time{margin-top:6px;padding-top:7px;border-top:1px solid rgba(255,255,255,.065);display:flex;justify-content:space-between;color:#79abc3;font-size:7.5px}
+.data-readiness-time strong{color:#b9deec;font-weight:700}
+@keyframes dataReadyPulse{to{opacity:.35;transform:scale(.72)}}
