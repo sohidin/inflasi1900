@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.33"
+  CACHE_VERSION: "v10.36"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -22,6 +22,53 @@ const CONFIG = {
 const REQUEST_PERIOD_ROWS_ = {};
 
 const REQUEST_FILTERS_ = {};
+
+
+function dataRevision_(){
+  return PropertiesService.getScriptProperties()
+    .getProperty("WEB_DATA_REVISION") || "1";
+}
+
+function cacheVersion_(){
+  return CONFIG.CACHE_VERSION + ":r" + dataRevision_();
+}
+
+function newDataRevision_(){
+  const value=String(Date.now());
+  PropertiesService.getScriptProperties()
+    .setProperty("WEB_DATA_REVISION",value);
+  return value;
+}
+
+function saveSnapshotStatus_(status){
+  PropertiesService.getScriptProperties()
+    .setProperty("WEB_SNAPSHOT_STATUS",JSON.stringify(status));
+}
+
+function snapshotStatus_(){
+  const raw=PropertiesService.getScriptProperties()
+    .getProperty("WEB_SNAPSHOT_STATUS") || "";
+  if(!raw){
+    return {
+      ready:false,
+      revision:dataRevision_(),
+      lastRefresh:"",
+      durationSeconds:null,
+      message:"Belum pernah di-refresh"
+    };
+  }
+  try{
+    return JSON.parse(raw);
+  }catch(_){
+    return {
+      ready:false,
+      revision:dataRevision_(),
+      lastRefresh:"",
+      durationSeconds:null,
+      message:"Status cache tidak terbaca"
+    };
+  }
+}
 
 function doGet(e) {
   try {
@@ -39,6 +86,8 @@ function doGet(e) {
     else if (action === "dashboardBootstrap") result = getDashboardBootstrap_(p);
     else if (action === "dashboardYear") result = getDashboardYear_(p);
     else if (action === "warmPeriod") result = warmPeriod_(p);
+    else if (action === "refreshDataWeb") result = refreshDataWeb_(p.token);
+    else if (action === "snapshotStatus") result = snapshotStatus_();
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
     else if (action === "clearCache") result = clearCache_(p.token);
@@ -124,7 +173,7 @@ function sheet_(source) {
  * - Posisi blok tahun-bulan di-cache.
  */
 function getPeriodIndex_(source){
-  const cache=CacheService.getScriptCache(),key=CONFIG.CACHE_VERSION+":periodIndex:"+source,cached=cache.get(key);if(cached)return JSON.parse(cached);
+  const cache=CacheService.getScriptCache(),key=cacheVersion_()+":periodIndex:"+source,cached=cache.get(key);if(cached)return JSON.parse(cached);
   const sh=sheet_(source).sh,lastRow=sh.getLastRow();if(lastRow<2)return {};const ym=sh.getRange(2,1,lastRow-1,2).getDisplayValues(),index={};
   let ck=null,start=null,prev=null;const close=()=>{if(ck&&start!==null&&prev!==null){if(!index[ck])index[ck]=[];index[ck].push({start,count:prev-start+1});}};
   for(let i=0;i<ym.length;i++){const y=clean_(ym[i][0]),m=clean_(ym[i][1]),row=i+2,k=y&&m?y+"|"+m:"";if(k!==ck||(prev!==null&&row!==prev+1)){close();ck=k;start=k?row:null;}prev=row;}close();
@@ -138,7 +187,7 @@ function getPeriodRows_(source,year,month){
   }
 
   const cache=CacheService.getScriptCache(),
-        key=CONFIG.CACHE_VERSION+":period:"+source+":"+year+":"+month,
+        key=cacheVersion_()+":period:"+source+":"+year+":"+month,
         cached=cache.get(key);
 
   if(cached){
@@ -178,7 +227,7 @@ function getFilters_(source) {
   if (REQUEST_FILTERS_[source]) return REQUEST_FILTERS_[source];
 
   const cache = CacheService.getScriptCache();
-  const key = CONFIG.CACHE_VERSION + ":filters:" + source;
+  const key = cacheVersion_() + ":filters:" + source;
   const cached = cache.get(key);
   if (cached) {
     const parsed = JSON.parse(cached);
@@ -245,7 +294,7 @@ function getPivotTable_(p) {
   if (!year || !month || flag === "") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
   const cache = CacheService.getScriptCache();
-  const key = [CONFIG.CACHE_VERSION,"pivot",source,period,view,year,month,flag].join(":");
+  const key = [cacheVersion_(),"pivot",source,period,view,year,month,flag].join(":");
   const cached = cache.get(key);
   if(cached) return JSON.parse(cached);
 
@@ -319,7 +368,7 @@ function buildDashboardStablePayload_(year) {
   if (!year) throw new Error("Tahun Dashboard belum tersedia.");
 
   const cache = CacheService.getScriptCache();
-  const key = CONFIG.CACHE_VERSION + ":dashboardStable:" + year;
+  const key = cacheVersion_() + ":dashboardStable:" + year;
   const cached = cache.get(key);
   if (cached) return JSON.parse(cached);
 
@@ -443,7 +492,7 @@ function getHeadline_(p) {
   const month=String(p.month||"");
   if(!year||!month) throw new Error("Tahun dan bulan harus dipilih.");
 
-  const key=[CONFIG.CACHE_VERSION,"headline",source,year,month].join(":");
+  const key=[cacheVersion_(),"headline",source,year,month].join(":");
   const cache=CacheService.getScriptCache();
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);
@@ -495,7 +544,7 @@ function getHeadlineCompare_(p) {
   }
 
   const key=[
-    CONFIG.CACHE_VERSION,"headlineCompare",
+    cacheVersion_(),"headlineCompare",
     asemYear,asemMonth,finalYear,finalMonth
   ].join(":");
 
@@ -576,7 +625,7 @@ function getCommodity_(p) {
 
   if(!year||!month||flag==="") throw new Error("Tahun, bulan, dan flag harus dipilih.");
 
-  const key=[CONFIG.CACHE_VERSION,"commodityAll",source,period,year,month,flag,mode].join(":");
+  const key=[cacheVersion_(),"commodityAll",source,period,year,month,flag,mode].join(":");
   const cache=CacheService.getScriptCache();
   const cached=cache.get(key);
   if(cached) return JSON.parse(cached);
@@ -762,6 +811,86 @@ function getBulkExport_(p){
   };
 }
 
+
+
+function refreshDataWeb_(token){
+  validateToken_(token);
+
+  const started=Date.now();
+  const revision=newDataRevision_();
+  const summary={filters:0,headline:0,pivot:0,dashboard:0};
+
+  saveSnapshotStatus_({
+    ready:false,
+    revision:revision,
+    lastRefresh:new Date().toISOString(),
+    durationSeconds:null,
+    message:"Sedang menyiapkan cache terbaru"
+  });
+
+  try{
+    ["asem","final"].forEach(source=>{
+      const filters=getFilters_(source);
+      summary.filters++;
+
+      const year=String((filters.years||[])[0]||"");
+      const month=String(((filters.monthsByYear||{})[year]||[])[0]||"");
+      const flags=(filters.flags||[]).map(String);
+
+      if(!year || !month) return;
+
+      // Small headline snapshot; getHeadline_ is strict Flag 0.
+      getHeadline_({source:source,year:year,month:month});
+      summary.headline++;
+
+      // Warm latest detailed tables. Prefer Flag 3 for detail menus.
+      const flag=flags.indexOf("3")>=0 ? "3" : String(flags[0]||"");
+      if(flag!==""){
+        ["mtm","ytd","yoy"].forEach(period=>{
+          ["inflasi","andil"].forEach(view=>{
+            getPivotTable_({
+              source:source,
+              period:period,
+              view:view,
+              year:year,
+              month:month,
+              flag:flag
+            });
+            summary.pivot++;
+          });
+        });
+      }
+    });
+
+    const dash=getDashboardBootstrap_({});
+    if(dash && dash.year) summary.dashboard=1;
+
+    const duration=Math.round((Date.now()-started)/1000);
+    const status={
+      ready:true,
+      revision:revision,
+      lastRefresh:new Date().toISOString(),
+      durationSeconds:duration,
+      message:"Data web terbaru siap digunakan",
+      summary:summary
+    };
+
+    saveSnapshotStatus_(status);
+    return status;
+
+  }catch(err){
+    const status={
+      ready:false,
+      revision:revision,
+      lastRefresh:new Date().toISOString(),
+      durationSeconds:Math.round((Date.now()-started)/1000),
+      message:"Refresh gagal: "+(err.message||String(err)),
+      summary:summary
+    };
+    saveSnapshotStatus_(status);
+    throw err;
+  }
+}
 
 function warmPeriod_(p){
   const source=String(p.source||"");

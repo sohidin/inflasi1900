@@ -254,6 +254,7 @@ function showLogin() {
 async function showApp() {
   document.getElementById("loginPage").classList.add("hidden");
   document.getElementById("appPage").classList.remove("hidden");
+  loadSnapshotStatus();
 
   const route=currentRoute();
 
@@ -422,10 +423,177 @@ async function handleLeafClick(btn) {
   setSourceReadyStatus(state.source,"ready","Siap");
 }
 
+
+// ===========================================================================
+// V10.36 — REFRESH DATA WEB
+// ===========================================================================
+function activeToken(){
+  return sessionStorage.getItem("inflasi_token") ||
+    (typeof getSharedSessionToken==="function" ? getSharedSessionToken() : "") ||
+    "";
+}
+
+function snapshotTimeText(iso){
+  if(!iso) return "-";
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("id-ID",{
+    day:"2-digit",month:"short",year:"numeric",
+    hour:"2-digit",minute:"2-digit"
+  });
+}
+
+function renderSnapshotStatus(status){
+  const el=document.getElementById("snapshotStatusText");
+  if(!el) return;
+  el.classList.remove("is-ready");
+
+  if(!status){
+    el.textContent="Belum dicek";
+    return;
+  }
+
+  if(status.ready){
+    el.textContent=`Siap • ${snapshotTimeText(status.lastRefresh)}`;
+    el.classList.add("is-ready");
+  }else{
+    el.textContent=status.message || "Belum siap";
+  }
+}
+
+async function loadSnapshotStatus(){
+  try{
+    const r=await cachedApi(
+      "snapshotStatus",
+      {action:"snapshotStatus"},
+      60*1000
+    );
+    renderSnapshotStatus(r);
+    return r;
+  }catch(_){
+    renderSnapshotStatus(null);
+    return null;
+  }
+}
+
+function clearAppDataCache(){
+  try{
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key && key.startsWith("inflasi_") &&
+         !key.includes("token") &&
+         !key.includes("session")){
+        keys.push(key);
+      }
+    }
+    keys.forEach(k=>localStorage.removeItem(k));
+  }catch(_){}
+
+  state._viewCache?.clear?.();
+  state._viewInflight?.clear?.();
+  state.dashboardYearCache?.clear?.();
+
+  state.filterCache={asem:null,final:null};
+  state.finalFilterCache=null;
+  state.dashboardFilterCache=null;
+  state._lastViewKey="";
+  state._prefetchStarted=false;
+}
+
+function refreshProgress(percent,text){
+  const bar=document.getElementById("refreshProgressBar");
+  const label=document.getElementById("refreshProgressText");
+  if(bar) bar.style.width=Math.max(0,Math.min(100,percent))+"%";
+  if(label) label.textContent=text;
+}
+
+async function refreshDataWeb(){
+  const modal=document.getElementById("refreshDataModal");
+  const title=document.getElementById("refreshModalTitle");
+  const text=document.getElementById("refreshModalText");
+  const elapsed=document.getElementById("refreshElapsedText");
+  const closeBtn=document.getElementById("closeRefreshModalBtn");
+  const refreshBtn=document.getElementById("refreshDataWebBtn");
+
+  modal?.classList.remove("hidden");
+  closeBtn?.classList.add("hidden");
+  if(refreshBtn) refreshBtn.disabled=true;
+
+  if(title) title.textContent="Menyiapkan data terbaru";
+  if(text) text.textContent="Membangun versi cache baru dari spreadsheet. Anda cukup melakukan ini setelah data diperbarui.";
+
+  refreshProgress(7,"Membuat versi data baru…");
+
+  const started=Date.now();
+  const timer=setInterval(()=>{
+    const sec=Math.round((Date.now()-started)/1000);
+    if(elapsed) elapsed.textContent=sec+" dtk";
+    const pct=Math.min(90,7+sec*4);
+    refreshProgress(
+      pct,
+      sec<3 ? "Membaca metadata…" :
+      sec<7 ? "Menyiapkan Angka Sementara…" :
+      sec<12 ? "Menyiapkan Angka Final…" :
+      "Memanaskan cache menu…"
+    );
+  },500);
+
+  try{
+    const token=activeToken();
+    if(!token) throw new Error("Sesi login tidak tersedia.");
+
+    const r=await Api.request({
+      action:"refreshDataWeb",
+      token:token
+    });
+
+    clearInterval(timer);
+    refreshProgress(100,"Data terbaru siap digunakan");
+    clearAppDataCache();
+    renderSnapshotStatus(r);
+
+    if(title) title.textContent="Refresh data berhasil";
+    if(text){
+      text.textContent=`Cache baru selesai dibuat dalam ${r.durationSeconds ?? 0} detik. Klik menu berikutnya akan menggunakan versi data terbaru.`;
+    }
+    if(elapsed) elapsed.textContent=(r.durationSeconds ?? 0)+" dtk";
+
+    // Rehydrate visible dashboard and smart prefetch.
+    setSourceReadyStatus?.("dashboard","loading","Memuat baru");
+    loadDashboard()
+      .then(()=>{
+        setSourceReadyStatus?.("dashboard","ready","Siap");
+        if(typeof startSmartBackgroundPrefetch==="function"){
+          startSmartBackgroundPrefetch();
+        }
+      })
+      .catch(()=>{
+        setSourceReadyStatus?.("dashboard","error","Coba lagi");
+      });
+
+    closeBtn?.classList.remove("hidden");
+
+  }catch(err){
+    clearInterval(timer);
+    refreshProgress(100,"Refresh belum berhasil");
+    if(title) title.textContent="Refresh data gagal";
+    if(text) text.textContent=String(err?.message||err);
+    closeBtn?.classList.remove("hidden");
+  }finally{
+    if(refreshBtn) refreshBtn.disabled=false;
+  }
+}
+
 // ===========================================================================
 // APP EVENTS
 // ===========================================================================
 function bindAppEvents() {
+
+  document.getElementById("refreshDataWebBtn")?.addEventListener("click", refreshDataWeb);
+  document.getElementById("closeRefreshModalBtn")?.addEventListener("click", () => {
+    document.getElementById("refreshDataModal")?.classList.add("hidden");
+  });
   document.getElementById("applyFilterBtn").addEventListener("click", async () => {
     state._lastViewKey="";
     setSourceReadyStatus(state.source,"loading","Memuat");

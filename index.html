@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
-  <link rel="stylesheet" href="style.css?v=10.35">
+  <link rel="stylesheet" href="style.css?v=10.36">
 </head>
 <body>
   <!-- LOGIN -->
@@ -165,6 +165,19 @@
           <span>Cache siap pukul</span>
           <strong id="dataReadinessTime">-</strong>
         </div>
+
+        <div class="snapshot-status-line">
+          <span>Versi data web</span>
+          <strong id="snapshotStatusText">Belum dicek</strong>
+        </div>
+
+        <button id="refreshDataWebBtn" class="refresh-data-web-btn" type="button">
+          <span class="refresh-data-icon">↻</span>
+          <span>
+            <strong>Refresh Data Web</strong>
+            <small>Sinkronkan data terbaru</small>
+          </span>
+        </button>
       </div>
 
       <div class="sidebar-bottom">
@@ -558,6 +571,26 @@
   <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="script.js?v=10.35"></script>
+  <script src="script.js?v=10.36"></script>
+
+  <div id="refreshDataModal" class="modal-overlay hidden">
+    <div class="refresh-data-modal">
+      <div class="refresh-modal-icon">↻</div>
+      <span class="eyebrow">SINKRONISASI DATA</span>
+      <h3 id="refreshModalTitle">Menyiapkan data terbaru</h3>
+      <p id="refreshModalText">Cache lama akan diganti dengan versi data terbaru dari spreadsheet.</p>
+
+      <div class="refresh-progress-track">
+        <div id="refreshProgressBar" class="refresh-progress-bar"></div>
+      </div>
+
+      <div class="refresh-modal-meta">
+        <span id="refreshProgressText">Memulai…</span>
+        <strong id="refreshElapsedText">0 dtk</strong>
+      </div>
+
+      <button id="closeRefreshModalBtn" class="btn hidden" type="button">Tutup</button>
+    </div>
+  </div>
 </body>
 </html>

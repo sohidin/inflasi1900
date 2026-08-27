@@ -537,3 +537,24 @@ Header perbandingan Inflasi Asem sekarang memakai thead dua tingkat seperti merg
 - Sidebar menampilkan status Dashboard/Sementara/Final dan badge SIAP ketika ketiganya siap.
 - New-tab deep link tidak membuang waktu memuat Dashboard dulu.
 - Backend tidak diubah; menggunakan cache/warmPeriod yang sudah ada pada V10.34.
+
+
+## V10.36 — Refresh Data Web
+- Tombol `Refresh Data Web` ditambahkan pada panel STATUS CACHE.
+- Refresh memakai token login.
+- Setiap refresh membuat `WEB_DATA_REVISION` baru.
+- Semua cache key server menggunakan revision tersebut, sehingga cache lama otomatis diabaikan tanpa perlu menghapus satu per satu.
+- Refresh membangun ulang:
+  - filter Angka Sementara;
+  - filter Angka Final;
+  - headline Flag 0 terbaru;
+  - Inflasi/Andil MtM, YtD, YoY terbaru;
+  - Dashboard tahun terbaru.
+- Status refresh disimpan di Script Properties dan ditampilkan di sidebar.
+- Setelah refresh:
+  - cache browser/data view dibersihkan;
+  - Dashboard versi baru dimuat;
+  - smart-prefetch berjalan kembali.
+- Modal progress menunjukkan proses refresh dan durasi.
+- Gunakan tombol ini setelah data spreadsheet selesai diperbarui.
+- Code.gs berubah: wajib deploy Apps Script sebagai New version.
