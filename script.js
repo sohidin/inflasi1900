@@ -2,7 +2,7 @@
 // CONFIG
 // ===========================================================================
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwYS46F1H9CP7_O7xRzoQRSn6X5fK3HsodHRXyhhwjG1JzYSbVBgWPOaVO4zNSb2LRt/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbydLMMX2Sz-qctQ0PvdENwfDzCanVLzlE8fXRdpPEzmSb7e7wlxvhcq-2JibBgnyvLN/exec"
 };
 
 // ===========================================================================
@@ -427,10 +427,47 @@ async function handleLeafClick(btn) {
 
 
 
+
+async function checkServerDataVersion(){
+  try{
+    // This endpoint only checks getLastRow() + last row metadata on two sheets.
+    const v=await Api.request({action:"dataVersion"});
+    const current=String(v.revision||"");
+    const known=getKnownServerRevision();
+
+    if(current && known && current!==known){
+      clearLocalDataForNewRevision();
+    }
+
+    if(current) saveKnownServerRevision(current);
+
+    if(v.changed){
+      // Force filter cache refresh so newly appended month appears immediately.
+      state.filterCache={asem:null,final:null};
+      state.finalFilterCache=null;
+      state.dashboardFilterCache=null;
+
+      const source=state.source;
+      if(source==="asem" || source==="final"){
+        try{
+          await loadSourceFilters();
+        }catch(_){}
+      }
+    }
+
+    if(v.snapshot) renderSnapshotStatus?.(v.snapshot);
+
+    return v;
+  }catch(err){
+    console.debug("Data version check skipped:",err);
+    return null;
+  }
+}
+
 // ===========================================================================
 // V10.37 — SHARED SERVER CACHE AWARENESS
 // ===========================================================================
-const SERVER_REVISION_KEY="inflasi_server_revision_v10_37";
+const SERVER_REVISION_KEY="inflasi_server_revision_v10_38";
 
 function getKnownServerRevision(){
   try{
@@ -494,7 +531,8 @@ function clearLocalDataForNewRevision(){
 
 async function initializeSharedServerCache(){
   try{
-    const status=await Api.request({action:"snapshotStatus"});
+    const version=await checkServerDataVersion();
+    const status=version?.snapshot || await Api.request({action:"snapshotStatus"});
     renderSnapshotStatus?.(status);
 
     if(!status?.ready){
@@ -526,20 +564,32 @@ async function initializeSharedServerCache(){
 async function startBackgroundWorkSmart(){
   const server=await initializeSharedServerCache();
 
-  if(server.ready){
-    // IMPORTANT:
-    // CacheService is shared across devices. If the server snapshot is ready,
-    // do NOT repeat the large hotset prefetch on every browser/device.
-    //
-    // Only fetch lightweight filters on demand when a menu is clicked.
-    console.info("Shared server cache ready; heavy browser prefetch skipped.");
-    return;
+  // V10.38: never launch a large hotset automatically on login.
+  // Only prepare lightweight filter metadata in the background.
+  const warmFilters=async source=>{
+    try{
+      if(state.filterCache[source]) return;
+      const f=await cachedApi(
+        "filters",
+        {action:"filters",source},
+        20*60*1000
+      );
+      state.filterCache[source]=f;
+      localCacheSet?.(`filters_${source}`,f);
+    }catch(_){}
+  };
+
+  if("requestIdleCallback" in window){
+    requestIdleCallback(()=>{
+      warmFilters("asem");
+      setTimeout(()=>warmFilters("final"),350);
+    },{timeout:1600});
+  }else{
+    setTimeout(()=>warmFilters("asem"),500);
+    setTimeout(()=>warmFilters("final"),900);
   }
 
-  // Snapshot is not ready yet -> fall back to existing smart prefetch.
-  if(typeof startSmartBackgroundPrefetch==="function"){
-    startBackgroundWorkSmart();
-  }
+  return server;
 }
 
 // ===========================================================================
@@ -3678,3 +3728,12 @@ function getDownloadMeta() {
 
 function safeName(v) { return String(v || "export").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim(); }
 function round2(v) { const n = Number(v); return Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : v; }
+
+
+// Check for appended monthly rows without refreshing large datasets.
+// Five minutes is frequent enough for monthly data and very cheap server-side.
+setInterval(()=>{
+  if(!document.getElementById("appPage")?.classList.contains("hidden")){
+    checkServerDataVersion();
+  }
+},5*60*1000);

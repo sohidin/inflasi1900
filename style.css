@@ -3462,3 +3462,17 @@ table,
 .data-readiness-row strong{
   letter-spacing:-.01em;
 }
+
+
+/* V10.38 — auto-detect monthly append */
+.snapshot-status-line::after{
+  content:"AUTO";
+  margin-left:4px;
+  padding:2px 4px;
+  border-radius:5px;
+  background:rgba(79,211,171,.10);
+  color:#82dfc3;
+  font-size:6px;
+  font-weight:850;
+  letter-spacing:.06em;
+}

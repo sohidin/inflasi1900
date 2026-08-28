@@ -13,7 +13,7 @@ const CONFIG = {
   DATA_CACHE_SECONDS: 600,
 
   // Naikkan versi ini setiap struktur backend berubah agar cache lama tidak terbaca.
-  CACHE_VERSION: "v10.37"
+  CACHE_VERSION: "v10.38"
 };
 
 // Cache lokal selama SATU eksekusi Apps Script.
@@ -73,6 +73,95 @@ function snapshotStatus_(){
   }
 }
 
+
+function sourceAppendSignature_(source){
+  const obj=sheet_(source);
+  const sh=obj.sh;
+  const lastRow=sh.getLastRow();
+
+  if(lastRow<2){
+    return {
+      source:source,
+      lastRow:lastRow,
+      year:"",
+      month:"",
+      flag:""
+    };
+  }
+
+  // Extremely small read: only the final physical row A:B + G.
+  const ym=sh.getRange(lastRow,1,1,2).getDisplayValues()[0];
+  const flag=sh.getRange(lastRow,7,1,1).getDisplayValue();
+
+  return {
+    source:source,
+    lastRow:lastRow,
+    year:clean_(ym[0]),
+    month:clean_(ym[1]),
+    flag:clean_(flag)
+  };
+}
+
+function currentDataSignature_(){
+  const a=sourceAppendSignature_("asem");
+  const f=sourceAppendSignature_("final");
+
+  return {
+    asem:a,
+    final:f,
+    key:[
+      a.lastRow,a.year,a.month,a.flag,
+      f.lastRow,f.year,f.month,f.flag
+    ].join("|")
+  };
+}
+
+function ensureDataRevisionCurrent_(){
+  const props=PropertiesService.getScriptProperties();
+  const current=currentDataSignature_();
+  const previous=props.getProperty("WEB_SOURCE_SIGNATURE")||"";
+
+  if(previous!==current.key){
+    const revision=String(Date.now());
+    props.setProperty("WEB_SOURCE_SIGNATURE",current.key);
+    props.setProperty("WEB_DATA_REVISION",revision);
+
+    // Do not perform heavy warm-up here.
+    // Changing revision is enough to make stale cache keys unreachable.
+    saveSnapshotStatus_({
+      ready:true,
+      revision:revision,
+      lastRefresh:new Date().toISOString(),
+      durationSeconds:0,
+      message:"Perubahan baris baru terdeteksi otomatis",
+      autoDetected:true,
+      signature:current
+    });
+
+    return {
+      changed:true,
+      revision:revision,
+      signature:current
+    };
+  }
+
+  return {
+    changed:false,
+    revision:dataRevision_(),
+    signature:current
+  };
+}
+
+function dataVersion_(){
+  const state=ensureDataRevisionCurrent_();
+  return {
+    changed:state.changed,
+    revision:state.revision,
+    signature:state.signature,
+    snapshot:snapshotStatus_()
+  };
+}
+
 function doGet(e) {
   try {
     const p = e && e.parameter ? e.parameter : {};
@@ -91,6 +180,7 @@ function doGet(e) {
     else if (action === "warmPeriod") result = warmPeriod_(p);
     else if (action === "refreshDataWeb") result = refreshDataWeb_(p.token);
     else if (action === "snapshotStatus") result = snapshotStatus_();
+    else if (action === "dataVersion") result = dataVersion_();
     else if (action === "getUpdatedAt") result = getUpdatedAt_();
     else if (action === "setUpdatedAt") result = setUpdatedAt_(p.value, p.token);
     else if (action === "clearCache") result = clearCache_(p.token);
@@ -176,6 +266,7 @@ function sheet_(source) {
  * - Posisi blok tahun-bulan di-cache.
  */
 function getPeriodIndex_(source){
+  ensureDataRevisionCurrent_();
   const cache=CacheService.getScriptCache(),key=cacheVersion_()+":periodIndex:"+source,cached=cache.get(key);if(cached)return JSON.parse(cached);
   const sh=sheet_(source).sh,lastRow=sh.getLastRow();if(lastRow<2)return {};const ym=sh.getRange(2,1,lastRow-1,2).getDisplayValues(),index={};
   let ck=null,start=null,prev=null;const close=()=>{if(ck&&start!==null&&prev!==null){if(!index[ck])index[ck]=[];index[ck].push({start,count:prev-start+1});}};
@@ -227,6 +318,7 @@ function getPeriodRows_(source,year,month){
 }
 
 function getFilters_(source) {
+  ensureDataRevisionCurrent_();
   if (REQUEST_FILTERS_[source]) return REQUEST_FILTERS_[source];
 
   const cache = CacheService.getScriptCache();
@@ -821,6 +913,8 @@ function refreshDataWeb_(token){
 
   const started=Date.now();
   const revision=newDataRevision_();
+  const signature=currentDataSignature_();
+  PropertiesService.getScriptProperties().setProperty("WEB_SOURCE_SIGNATURE",signature.key);
   const summary={filters:0,headline:0,pivot:0,dashboard:0};
 
   saveSnapshotStatus_({
@@ -846,22 +940,20 @@ function refreshDataWeb_(token){
       getHeadline_({source:source,year:year,month:month});
       summary.headline++;
 
-      // Warm latest detailed tables. Prefer Flag 3 for detail menus.
+      // V10.38: do not build many large pivot tables during refresh.
+      // We only warm one likely first view; other menus load on demand and
+      // then stay cached.
       const flag=flags.indexOf("3")>=0 ? "3" : String(flags[0]||"");
       if(flag!==""){
-        ["mtm","ytd","yoy"].forEach(period=>{
-          ["inflasi","andil"].forEach(view=>{
-            getPivotTable_({
-              source:source,
-              period:period,
-              view:view,
-              year:year,
-              month:month,
-              flag:flag
-            });
-            summary.pivot++;
-          });
+        getPivotTable_({
+          source:source,
+          period:"mtm",
+          view:"inflasi",
+          year:year,
+          month:month,
+          flag:flag
         });
+        summary.pivot++;
       }
     });
 

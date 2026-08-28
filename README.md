@@ -593,3 +593,40 @@ prefetch berat yang sama.
 ### Deployment
 - Code.gs berubah sedikit untuk metadata snapshot.
 - Deploy Apps Script sebagai New version.
+
+
+## V10.38 — Auto Detect Monthly Append + Lighter Loading
+### Fix bulan baru
+- Sistem tidak lagi bergantung sepenuhnya pada tombol Refresh Data.
+- Endpoint `dataVersion` mengecek:
+  - lastRow sheet `asem`;
+  - last year/month/flag;
+  - lastRow sheet `angka final inflasi`;
+  - last year/month/flag.
+- Bila baris bulan baru ditambahkan:
+  - revision server berubah otomatis;
+  - cache lama menjadi tidak terpakai;
+  - filter bulan dibaca ulang;
+  - bulan baru langsung tersedia.
+
+### Cocok untuk pola data bulanan
+Karena user menambah baris setiap bulan, pengecekan lastRow sangat murah dan efektif.
+
+### Performance
+- Login tidak lagi memanaskan banyak tabel.
+- Background hanya memuat metadata filter ringan.
+- Refresh Data Web hanya warm:
+  - filters;
+  - headline Flag 0;
+  - 1 tabel Inflasi MtM terbaru per sumber;
+  - Dashboard.
+- Pivot lainnya dibangun hanya saat benar-benar dibuka.
+- Browser mengecek data version setiap 5 menit dengan request sangat kecil.
+- Saat menu diklik, data version dicek dulu agar bulan terbaru tidak tertinggal.
+
+### Manual Refresh
+- Tombol `Refresh Data Web` tetap tersedia untuk refresh paksa.
+- Tetapi penambahan bulan baru normalnya terdeteksi otomatis.
+
+### Deployment
+- Code.gs berubah; deploy Apps Script New version.
